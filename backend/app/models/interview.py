@@ -27,6 +27,13 @@ class InterviewType(str, enum.Enum):
     MANAGER_OPS_ROUND = "manager_ops_round"
 
 
+class InterviewDifficulty(str, enum.Enum):
+    """Interview difficulty levels."""
+    EASY = "easy"
+    MEDIUM = "medium"
+    HARD = "hard"
+
+
 class Interview(Base):
     """Represents a single interview session."""
     __tablename__ = "interviews"
@@ -41,6 +48,9 @@ class Interview(Base):
     job_description: Mapped[str] = mapped_column(Text, nullable=False)
     interview_type: Mapped[InterviewType] = mapped_column(
         Enum(InterviewType), nullable=False, default=InterviewType.GENERAL_SCREENING
+    )
+    difficulty: Mapped[InterviewDifficulty] = mapped_column(
+        Enum(InterviewDifficulty), nullable=False, default=InterviewDifficulty.MEDIUM
     )
     status: Mapped[InterviewStatus] = mapped_column(
         Enum(InterviewStatus), nullable=False, default=InterviewStatus.CREATED

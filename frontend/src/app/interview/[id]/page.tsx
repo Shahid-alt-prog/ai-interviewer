@@ -372,8 +372,8 @@ export default function ActiveInterviewPage({
 
     let selectedVoice: SpeechSynthesisVoice | undefined;
 
-    if (selectedInterviewer === "Vikram") {
-      // Vikram is male — prioritise male voices strongly
+    if (selectedInterviewer === "Vikram" || selectedInterviewer === "Alex") {
+      // Vikram & Alex are male — prioritise male voices strongly
       const malePriority: Array<(v: SpeechSynthesisVoice) => boolean> = [
         // en-IN male (neural/natural preferred)
         (v) => v.lang.replace("_", "-").toLowerCase().startsWith("en-in") &&
@@ -403,7 +403,7 @@ export default function ActiveInterviewPage({
         if (selectedVoice) break;
       }
     } else {
-      // Alex & Sarah — prefer en-IN neural/natural, then fall back gracefully
+      // Sarah (female/default) — prefer en-IN neural/natural, then fall back gracefully
       const defaultPriority: Array<(v: SpeechSynthesisVoice) => boolean> = [
         (v) => v.lang.replace("_", "-").toLowerCase().startsWith("en-in") &&
           (v.name.toLowerCase().includes("natural") || v.name.toLowerCase().includes("neural") || v.name.toLowerCase().includes("online")),
@@ -434,9 +434,12 @@ export default function ActiveInterviewPage({
     } else if (selectedInterviewer === "Vikram") {
       utterance.rate = 0.88;   // Architect: deliberate, calm, deep
       utterance.pitch = 0.9;   // Lower pitch reinforces male register
-    } else {
+    } else if (selectedInterviewer === "Alex") {
       utterance.rate = 0.92;   // Alex HR: warm, relaxed, conversational
-      utterance.pitch = 1.05;
+      utterance.pitch = 0.95;  // Lower pitch reinforces male register
+    } else {
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
     }
     utterance.volume = 1.0;
 
@@ -670,7 +673,7 @@ export default function ActiveInterviewPage({
   }
 
   return (
-    <div className="min-h-screen bg-[#07070a] text-foreground flex flex-col justify-between overflow-hidden">
+    <div className="min-h-screen bg-[#07070a] text-foreground flex flex-col justify-between overflow-x-hidden overflow-y-auto">
       {/* Top Banner Header */}
       <header className="glass h-16 border-b border-white/[0.05] flex items-center justify-between px-6 md:px-12 fixed top-0 left-0 right-0 z-40">
         <div className="flex items-center gap-2">
@@ -747,7 +750,7 @@ export default function ActiveInterviewPage({
                   <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground block text-center mb-1">
                     Select Your Recruiter Personality
                   </label>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {[
                       {
                         name: "Alex",

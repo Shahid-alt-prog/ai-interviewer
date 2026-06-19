@@ -22,6 +22,7 @@ class InterviewAgent:
         experience: List[Dict[str, Any]],
         duration_minutes: int,
         interview_type: str,
+        difficulty: str = "medium",
     ) -> Dict[str, Any]:
         """Generate a structured interview plan using the Pro model."""
         prompt_template = load_prompt("interview_planner")
@@ -41,6 +42,7 @@ class InterviewAgent:
             experience_summary=exp_summary,
             duration_minutes=duration_minutes,
             interview_type=interview_type,
+            difficulty=difficulty,
         )
 
         system_instruction = (
@@ -111,6 +113,7 @@ class InterviewAgent:
         max_follow_up_depth: int = 3,
         interviewer_name: str = "Alex",
         follow_up_signal: str = "no",
+        difficulty: str = "medium",
     ) -> Dict[str, Any]:
         """Generate the next question or response for the candidate."""
         prompt_template = load_prompt("interviewer")
@@ -175,6 +178,7 @@ class InterviewAgent:
             candidate_response=candidate_response,
             interview_type=interview_type,
             follow_up_signal=follow_up_signal,
+            difficulty=difficulty,
         )
 
         # Transcription error handling rules
@@ -186,12 +190,28 @@ class InterviewAgent:
         )
 
         # Rich persona system instructions
+        question_enforcement = (
+            "CRITICAL REQUIREMENT: You MUST always end your response ('ai_message') with a single, clear question "
+            "for the candidate, unless you are wrapping up or concluding the interview (where is_complete is true). "
+            "Never just react to or analyze their response without asking a follow-up or transition question."
+        )
+
+        repetition_ban = (
+            "STRICT REPETITION BAN: Do NOT repeat identical conversational openings, sentence structures, or phrases "
+            "that you have already used in the conversation history. Keep your language fresh, dynamic, and organic. "
+            "Never start multiple turns with the same phrase (e.g., if you started a previous turn with 'Oh nice,' or 'Got it,' "
+            "do NOT start this turn with the same words). Do NOT reuse the same reaction or filler phrases. Be highly "
+            "conversational and vary your transition/reaction patterns."
+        )
+
         if interviewer_name == "Sarah":
             system_instruction = (
                 f"You are {interviewer_name}, a friendly but analytically sharp Technical Lead. "
                 "You conduct deep technical interviews. You sound like a real engineer — casual, direct, and curious. "
                 "You care about HOW things work, tradeoffs, edge cases, and scalability. "
                 "You NEVER sound like a corporate HR bot. You never step out of character.\n"
+                f"{question_enforcement}\n"
+                f"{repetition_ban}\n"
                 f"{transcription_handling}"
             )
         elif interviewer_name == "Vikram":
@@ -200,6 +220,8 @@ class InterviewAgent:
                 "You've seen projects succeed and fail, and you ask pointed questions about execution, leadership, and lessons learned. "
                 "You sound wise, pragmatic, and reassuring — like a senior mentor. "
                 "You NEVER sound like a corporate HR bot. You never step out of character.\n"
+                f"{question_enforcement}\n"
+                f"{repetition_ban}\n"
                 f"{transcription_handling}"
             )
         else:
@@ -208,6 +230,8 @@ class InterviewAgent:
                 "You make candidates feel completely at ease. You listen carefully and react authentically to what they say. "
                 "You care deeply about the candidate's journey, motivations, and human story. "
                 "You NEVER sound like a corporate HR bot. You never step out of character.\n"
+                f"{question_enforcement}\n"
+                f"{repetition_ban}\n"
                 f"{transcription_handling}"
             )
 
@@ -220,6 +244,7 @@ class InterviewAgent:
                 prompt=prompt,
                 model_name=settings.GEMINI_FLASH_MODEL,
                 system_instruction=system_instruction,
+                temperature=0.85,
             )
             # Validate critical fields are present
             if not result.get("ai_message"):

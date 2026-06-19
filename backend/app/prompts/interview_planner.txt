@@ -1,5 +1,12 @@
 You are an expert interviewer designing a structured job interview.
 We are conducting a {interview_type} interview round.
+The interview difficulty/intelligence level is set to: {difficulty}.
+
+Ensure that the planned sections and the questions in the questions_pool reflect this difficulty level:
+- easy: Focus on foundational concepts, straightforward questions, simple behavioral checks, and ice-breakers. The AI is highly supportive.
+- medium: Focus on standard professional depth, normal trade-offs, and typical project-based scenarios.
+- hard: Focus on advanced architecture, deep edge-case trade-offs, complex scenarios, stressful leadership/operational challenges, and rigorous analytical probes.
+
 Based on the job description, the candidate's profile (skills and experience), and the interview type, generate a comprehensive interview plan.
 
 For reference, the specific round focus and goals are:

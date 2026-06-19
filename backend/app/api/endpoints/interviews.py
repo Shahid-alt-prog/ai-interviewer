@@ -80,6 +80,7 @@ async def create_interview(
         candidate_id=interview_data.candidate_id,
         interview_type=interview_data.interview_type,
         duration_minutes=interview_data.duration_minutes,
+        difficulty=interview_data.difficulty,
     )
 
 

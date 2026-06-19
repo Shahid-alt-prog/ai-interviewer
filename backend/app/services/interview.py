@@ -52,7 +52,7 @@ class InterviewService:
         self.eval_agent = eval_agent
         self.report_agent = report_agent
 
-    async def create_interview(self, title: str, job_description: str, candidate_id: uuid.UUID, interview_type: str, duration_minutes: int) -> Interview:
+    async def create_interview(self, title: str, job_description: str, candidate_id: uuid.UUID, interview_type: str, duration_minutes: int, difficulty: str = "medium") -> Interview:
         """Create a new interview record."""
         # Setup using schema validator logic indirectly
         from app.schemas.interview import InterviewCreate
@@ -61,6 +61,7 @@ class InterviewService:
             title=title,
             job_description=job_description,
             interview_type=interview_type,
+            difficulty=difficulty,
             duration_minutes=duration_minutes,
         )
         return await self.interview_repo.create(schema)
@@ -93,6 +94,7 @@ class InterviewService:
                 experience=experience,
                 duration_minutes=interview.duration_minutes,
                 interview_type=getattr(interview.interview_type, "value", interview.interview_type),
+                difficulty=getattr(interview.difficulty, "value", interview.difficulty),
             )
             
             # 2. Save Plan in database
@@ -281,6 +283,7 @@ class InterviewService:
             max_follow_up_depth=settings.MAX_FOLLOW_UP_DEPTH,
             interviewer_name=interviewer_name,
             follow_up_signal=follow_up_signal,
+            difficulty=getattr(interview.difficulty, "value", interview.difficulty),
         )
 
         ai_message = agent_response.get("ai_message", "")

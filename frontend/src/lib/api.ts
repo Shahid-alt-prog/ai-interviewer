@@ -1,8 +1,25 @@
-/**
- * API client for communicating with the FastAPI backend.
- */
+const getApiBaseUrl = () => {
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol; // "http:" or "https:"
+    const hostname = window.location.hostname;
+    
+    // Cloud workspace port mapping translation (Gitpod, GitHub Codespaces, etc.)
+    if (hostname.includes("-3000.")) {
+      return `${protocol}//${hostname.replace("-3000.", "-8000.")}/api/v1`;
+    }
+    if (hostname.includes("3000-")) {
+      return `${protocol}//${hostname.replace("3000-", "8000-")}/api/v1`;
+    }
+    
+    // For local development, align with the active protocol (handles secure context loopbacks)
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return `${protocol}//${hostname}:8000/api/v1`;
+    }
+  }
+  return "http://127.0.0.1:8000/api/v1";
+};
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || getApiBaseUrl();
 
 interface ApiOptions {
   method?: string;
@@ -94,6 +111,7 @@ export const interviewsApi = {
     title: string;
     job_description: string;
     interview_type?: string;
+    difficulty?: string;
     duration_minutes?: number;
   }) => apiRequest<Interview>("/interviews/", { method: "POST", body: data }),
 
@@ -110,6 +128,7 @@ export const interviewsApi = {
     title: string;
     job_description: string;
     interview_type: string;
+    difficulty: string;
     duration_minutes: number;
     status: string;
   }>) => apiRequest<InterviewDetail>(`/interviews/${id}`, { method: "PUT", body: data }),
@@ -175,6 +194,7 @@ export interface Interview {
   candidate_id: string;
   title: string;
   interview_type: string;
+  difficulty: string;
   status: string;
   duration_minutes: number;
   current_section?: string;

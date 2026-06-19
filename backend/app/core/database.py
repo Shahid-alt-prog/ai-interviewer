@@ -8,7 +8,11 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 
-is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+db_url = settings.DATABASE_URL
+if db_url.startswith("postgresql://"):
+    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+is_sqlite = db_url.startswith("sqlite")
 
 engine_kwargs = {}
 if not is_sqlite:
@@ -22,7 +26,7 @@ from sqlalchemy import event
 from sqlalchemy.engine import Engine
 
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    db_url,
     echo=settings.APP_DEBUG,
     **engine_kwargs
 )

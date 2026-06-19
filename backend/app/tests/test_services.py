@@ -278,3 +278,55 @@ async def test_interview_service_start_and_message(db_session: AsyncSession):
     assert report is not None
     assert report.overall_score == 8.0
     assert report.recommendation == "Proceed"
+
+
+@pytest.mark.asyncio
+async def test_gemini_service_fail_fast_on_long_rate_limit(monkeypatch):
+    """Verify GeminiService fails fast and does not retry if the Groq rate limit sleep is too long (exceeds 15s)."""
+    monkeypatch.setattr("app.services.gemini.settings.GROQ_API_KEY", "gsk_groqkey")
+
+    service = GeminiService()
+
+    # Simulate httpx.AsyncClient response with 429 status code and retry-after header of 172 seconds
+    mock_response = MagicMock()
+    mock_response.status_code = 429
+    mock_response.headers = {"retry-after": "172"}
+    mock_response.request = MagicMock()
+
+    # Patch httpx.AsyncClient.post to return mock_response
+    with patch("httpx.AsyncClient.post", return_value=mock_response):
+        with pytest.raises(Exception) as exc_info:
+            await service.generate_text("Hello", "llama-3.1-8b-instant")
+        
+        # Verify it raised the rate limit error without sleeping/retrying 5 times
+        assert "exceeds maximum threshold" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_gemini_service_uses_custom_temperature(monkeypatch):
+    """Verify GeminiService correctly passes temperature when calling Groq API."""
+    monkeypatch.setattr("app.services.gemini.settings.GROQ_API_KEY", "gsk_groqkey")
+    service = GeminiService()
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "choices": [
+            {
+                "message": {
+                    "content": '{"ai_message": "Hello from custom temp"}'
+                }
+            }
+        ]
+    }
+
+    with patch("httpx.AsyncClient.post", return_value=mock_response) as mock_post:
+        await service.generate_json("Test prompt", "llama-3.1-8b-instant", temperature=0.85)
+        # Verify the payload temperature
+        assert mock_post.called
+        kwargs = mock_post.call_args[1]
+        assert kwargs["json"]["temperature"] == 0.85
+
+
+
+

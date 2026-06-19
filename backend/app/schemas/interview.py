@@ -5,7 +5,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from app.models.interview import InterviewStatus, InterviewType
+from app.models.interview import InterviewStatus, InterviewType, InterviewDifficulty
 
 
 class InterviewCreate(BaseModel):
@@ -14,7 +14,8 @@ class InterviewCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
     job_description: str = Field(..., min_length=10)
     interview_type: InterviewType = InterviewType.GENERAL_SCREENING
-    duration_minutes: int = Field(default=30, ge=15, le=90)
+    difficulty: InterviewDifficulty = InterviewDifficulty.MEDIUM
+    duration_minutes: int = Field(default=30, ge=5, le=90)
 
 
 class InterviewResponse(BaseModel):
@@ -23,6 +24,7 @@ class InterviewResponse(BaseModel):
     candidate_id: uuid.UUID
     title: str
     interview_type: InterviewType
+    difficulty: InterviewDifficulty
     status: InterviewStatus
     duration_minutes: int
     current_section: Optional[str] = None
@@ -63,5 +65,6 @@ class InterviewUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=255)
     job_description: Optional[str] = Field(None, min_length=10)
     interview_type: Optional[InterviewType] = None
-    duration_minutes: Optional[int] = Field(None, ge=15, le=90)
+    difficulty: Optional[InterviewDifficulty] = None
+    duration_minutes: Optional[int] = Field(None, ge=5, le=90)
     status: Optional[InterviewStatus] = None

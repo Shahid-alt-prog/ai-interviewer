@@ -49,6 +49,7 @@ export default function InterviewsPage() {
     title: "",
     job_description: "",
     interview_type: "general_screening",
+    difficulty: "medium",
     duration_minutes: 30,
   });
 
@@ -59,6 +60,7 @@ export default function InterviewsPage() {
     title: "",
     job_description: "",
     interview_type: "general_screening",
+    difficulty: "medium",
     duration_minutes: 30,
     status: "created",
   });
@@ -108,6 +110,7 @@ export default function InterviewsPage() {
         title: detail.title,
         job_description: detail.job_description,
         interview_type: detail.interview_type,
+        difficulty: detail.difficulty || "medium",
         duration_minutes: detail.duration_minutes,
         status: detail.status,
       });
@@ -131,6 +134,7 @@ export default function InterviewsPage() {
         title: editFormData.title,
         job_description: editFormData.job_description,
         interview_type: editFormData.interview_type,
+        difficulty: editFormData.difficulty,
         duration_minutes: editFormData.duration_minutes,
         status: editFormData.status,
       });
@@ -178,6 +182,7 @@ export default function InterviewsPage() {
         title: formData.title,
         job_description: formData.job_description,
         interview_type: formData.interview_type,
+        difficulty: formData.difficulty,
         duration_minutes: formData.duration_minutes,
       });
 
@@ -216,6 +221,17 @@ export default function InterviewsPage() {
     };
     const c = config[status] || { label: status, className: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20" };
     return <Badge className={`border ${c.className}`}>{c.label}</Badge>;
+  };
+
+  const getDifficultyBadge = (difficulty: string) => {
+    const diff = (difficulty || "medium").toLowerCase();
+    const config: Record<string, { label: string; className: string }> = {
+      easy: { label: "Easy AI", className: "bg-green-500/10 text-green-400 border-green-500/20" },
+      medium: { label: "Medium AI", className: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" },
+      hard: { label: "Hard AI", className: "bg-red-500/10 text-red-400 border-red-500/20 font-bold" },
+    };
+    const d = config[diff] || { label: diff, className: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20" };
+    return <Badge className={`border ${d.className} uppercase tracking-wider text-[10px]`}>{d.label}</Badge>;
   };
 
   const filteredInterviews = interviews.filter((interview) => {
@@ -320,6 +336,7 @@ export default function InterviewsPage() {
                       <span className="text-xs font-semibold text-primary/80 capitalize bg-primary/10 px-2.5 py-0.5 rounded-full border border-primary/20">
                         {typeLabel}
                       </span>
+                      {getDifficultyBadge(interview.difficulty)}
                       {getStatusBadge(interview.status)}
                     </div>
                     <CardTitle className="text-lg font-bold tracking-tight text-foreground mt-3 group-hover:text-primary transition-colors">
@@ -431,7 +448,7 @@ export default function InterviewsPage() {
                 </div>
               ) : (
                 <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
                       <label htmlFor="candidate_id" className="text-xs font-semibold text-muted-foreground">
                         Select Candidate *
@@ -467,6 +484,23 @@ export default function InterviewsPage() {
                             {t.label}
                           </option>
                         ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label htmlFor="difficulty" className="text-xs font-semibold text-muted-foreground">
+                        Difficulty Level *
+                      </label>
+                      <select
+                        id="difficulty"
+                        name="difficulty"
+                        value={formData.difficulty}
+                        onChange={handleInputChange}
+                        className="w-full h-10 px-3 rounded-lg border border-border bg-black text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                      >
+                        <option value="easy">Easy (Supportive AI)</option>
+                        <option value="medium">Medium (Standard AI)</option>
+                        <option value="hard">Hard (Challenging AI)</option>
                       </select>
                     </div>
                   </div>
@@ -511,7 +545,7 @@ export default function InterviewsPage() {
                     <input
                       type="range"
                       name="duration_minutes"
-                      min="15"
+                      min="5"
                       max="90"
                       step="5"
                       value={formData.duration_minutes}
@@ -519,7 +553,7 @@ export default function InterviewsPage() {
                       className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-primary"
                     />
                     <div className="flex justify-between text-[10px] text-muted-foreground">
-                      <span>15 Min (Quick screen)</span>
+                      <span>5 Min (Quick screen)</span>
                       <span>90 Min (Deep assessment)</span>
                     </div>
                   </div>
@@ -575,7 +609,7 @@ export default function InterviewsPage() {
                 </div>
               ) : (
                 <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold text-muted-foreground">
                         Candidate
@@ -603,6 +637,23 @@ export default function InterviewsPage() {
                             {t.label}
                           </option>
                         ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label htmlFor="edit_difficulty" className="text-xs font-semibold text-muted-foreground">
+                        Difficulty Level *
+                      </label>
+                      <select
+                        id="edit_difficulty"
+                        name="difficulty"
+                        value={editFormData.difficulty}
+                        onChange={handleEditInputChange}
+                        className="w-full h-10 px-3 rounded-lg border border-border bg-black text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                      >
+                        <option value="easy">Easy (Supportive AI)</option>
+                        <option value="medium">Medium (Standard AI)</option>
+                        <option value="hard">Hard (Challenging AI)</option>
                       </select>
                     </div>
                   </div>
@@ -669,7 +720,7 @@ export default function InterviewsPage() {
                     <input
                       type="range"
                       name="duration_minutes"
-                      min="15"
+                      min="5"
                       max="90"
                       step="5"
                       value={editFormData.duration_minutes}
@@ -677,7 +728,7 @@ export default function InterviewsPage() {
                       className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-primary"
                     />
                     <div className="flex justify-between text-[10px] text-muted-foreground">
-                      <span>15 Min (Quick screen)</span>
+                      <span>5 Min (Quick screen)</span>
                       <span>90 Min (Deep assessment)</span>
                     </div>
                   </div>

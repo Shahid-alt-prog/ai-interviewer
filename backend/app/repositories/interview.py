@@ -23,6 +23,7 @@ class InterviewRepository:
             title=schema.title,
             job_description=schema.job_description,
             interview_type=schema.interview_type,
+            difficulty=schema.difficulty,
             duration_minutes=schema.duration_minutes,
             status=InterviewStatus.CREATED,
             conversation_history=[],
