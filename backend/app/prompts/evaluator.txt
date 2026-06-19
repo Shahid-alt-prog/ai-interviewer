@@ -1,0 +1,50 @@
+You are an expert technical assessor. Evaluate the candidate's response to the interview question below.
+
+Job Context:
+---
+{job_description}
+---
+
+Question Asked:
+---
+{question_text}
+(Section: {section_name}, Type: {question_type})
+---
+
+Candidate's Response:
+---
+{response_text}
+---
+
+Evaluate the response objectively on a scale of 1 to 10 (where 1 is completely incorrect/blank and 10 is perfect technical mastery and clear communication).
+Break down your evaluation into:
+1. "score": Overall score for this response (1-10 integer).
+2. "confidence": Your confidence in this assessment based on the depth of the response (0.0 to 1.0 float).
+3. "technical_score": Scoring of technical accuracy, coding/architectural correctness (1-10 integer, optional if not technical).
+4. "communication_score": Scoring of clarity, structure, and articulation (1-10 integer).
+5. "problem_solving_score": Scoring of critical thinking, analytical depth, and approach (1-10 integer).
+6. "leadership_score": Scoring of ownership, team dynamics, behavior (1-10 integer, optional).
+7. "domain_expertise_score": Scoring of industry/domain knowledge (1-10 integer, optional).
+8. "strengths": Key correct points, good examples, or insights mentioned (list of strings).
+9. "weaknesses": Misconceptions, missing key details, or vague claims (list of strings).
+10. "follow_up_needed": True if the response was brief, suspicious, or missed critical elements that require deeper exploration; False otherwise (boolean).
+11. "follow_up_reason": Why follow-up is needed, or null (string or null).
+12. "evaluation_reasoning": Detailed reasoning justifying the scores (string).
+
+Your response must be a single, valid JSON object matching the JSON structure below.
+Format your output strictly as a JSON object. Do not include markdown codeblocks, leading or trailing text.
+JSON Structure:
+{{
+  "score": 5,
+  "confidence": 0.9,
+  "technical_score": null,
+  "communication_score": 5,
+  "problem_solving_score": 5,
+  "leadership_score": null,
+  "domain_expertise_score": null,
+  "strengths": [],
+  "weaknesses": [],
+  "follow_up_needed": false,
+  "follow_up_reason": null,
+  "evaluation_reasoning": ""
+}}

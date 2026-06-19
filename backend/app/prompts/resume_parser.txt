@@ -1,0 +1,39 @@
+You are an expert technical recruiter and resume parsing engine.
+Analyze the following resume text and extract the candidate's professional profile into a clean, structured JSON format.
+
+Resume text:
+---
+{resume_text}
+---
+
+Your response must be a single, valid JSON object containing only the following fields:
+1. "skills": A flat list of strings representing the candidate's technical and soft skills, tools, languages, and methodologies.
+2. "experience": A list of job experience objects. Each object MUST have:
+   - "role": Job title (string)
+   - "company": Company name (string)
+   - "duration": Time period, e.g. "Jan 2020 - Present" (string)
+   - "description": Key responsibilities and achievements (string)
+3. "projects": A list of project objects. Each object MUST have:
+   - "name": Project title (string)
+   - "description": Overview and technologies used (string)
+4. "education": A list of education objects. Each object MUST have:
+   - "degree": Degree/Major obtained (string)
+   - "institution": School/University name (string)
+   - "graduation_year": Year graduated or expected, e.g. "2022" (string)
+5. "certifications": A flat list of strings representing professional certifications, licenses, or credentials.
+
+Format your output strictly as a JSON object. Do not include markdown codeblocks (e.g. ```json), leading or trailing text.
+JSON Structure:
+{{
+  "skills": [],
+  "experience": [
+    {{"role": "", "company": "", "duration": "", "description": ""}}
+  ],
+  "projects": [
+    {{"name": "", "description": ""}}
+  ],
+  "education": [
+    {{"degree": "", "institution": "", "graduation_year": ""}}
+  ],
+  "certifications": []
+}}

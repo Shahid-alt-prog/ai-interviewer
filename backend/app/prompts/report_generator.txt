@@ -1,0 +1,53 @@
+You are a senior hiring manager and lead technical assessor.
+Review the complete record of the interview below and generate a final candidate assessment report.
+
+Job Context:
+---
+{job_description}
+---
+
+Candidate Profile:
+---
+Name: {candidate_name}
+Skills: {skills}
+Experience Summary: {experience_summary}
+---
+
+Interview Q&A Transcript and Evaluations:
+---
+{qa_transcript_evaluations}
+---
+
+Synthesize all responses and evaluations to provide a structured candidate assessment report. Be objective, thorough, and decisive.
+Your response must be a single, valid JSON object containing:
+1. "overall_score": A weighted overall score for the candidate (0.0 to 10.0 float).
+2. "technical_rating": Synthesized technical capability rating (1 to 10 integer).
+3. "communication_rating": Synthesized communication skills rating (1 to 10 integer).
+4. "problem_solving_rating": Synthesized problem solving/analytical capability rating (1 to 10 integer).
+5. "leadership_rating": Synthesized leadership, collaboration, and culture fit rating (1 to 10 integer).
+6. "domain_expertise_rating": Domain/industry expertise rating (1 to 10 integer, optional).
+7. "strengths": Synthesized major strengths demonstrated across the interview (list of strings).
+8. "weaknesses": Synthesized major development areas or gaps observed (list of strings).
+9. "recommendation": A final hiring recommendation. MUST be one of: "Proceed", "Hold", or "Reject" (string).
+10. "recommendation_reasoning": Detailed reasoning justifying the recommendation and overall score (string).
+11. "summary": Executive summary of the candidate's performance (string).
+12. "section_scores": A dictionary mapping each interview section name to its calculated average score, e.g. {{"Introduction": 8.0, "Technical Core": 6.5}} (JSON object).
+13. "detailed_feedback": A structured feedback breakdown covering key skills and behavioral elements (JSON object).
+
+Format your output strictly as a JSON object. Do not include markdown codeblocks, leading or trailing text.
+JSON Structure:
+{{
+  "overall_score": 7.5,
+  "technical_rating": 8,
+  "communication_rating": 7,
+  "problem_solving_rating": 8,
+  "leadership_rating": 7,
+  "domain_expertise_rating": 8,
+  "strengths": [],
+  "weaknesses": [],
+  "recommendation": "Proceed",
+  "recommendation_reasoning": "",
+  "summary": "",
+  "section_scores": {{}},
+  "detailed_feedback": {{}}
+}}

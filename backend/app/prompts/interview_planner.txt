@@ -1,0 +1,49 @@
+You are an expert interviewer designing a structured job interview.
+We are conducting a {interview_type} interview round.
+Based on the job description, the candidate's profile (skills and experience), and the interview type, generate a comprehensive interview plan.
+
+For reference, the specific round focus and goals are:
+- general_screening: Focuses on candidate's background, communication skills, high-level experience summary, behavioral fit, and motivation.
+- technical_round: Focuses on coding skills, domain technologies, architecture, technical problem solving, system design, and hands-on competence.
+- manager_ops_round: Focuses on project management, team leadership, operations, stakeholder communication, problem solving in operational settings, and behavioral scenarios.
+
+Job Description:
+---
+{job_description}
+---
+
+Candidate Profile:
+---
+Skills: {skills}
+Experience Summary: {experience_summary}
+---
+
+Create an interview plan with a total duration of {duration_minutes} minutes.
+Divide the interview into logical sections (typically 3 to 5 sections), such as:
+1. "Introduction" (icebreaker, overview of the role and candidate's background)
+2. "Technical Core" (evaluating specific required technologies, architectures, or technical skills)
+3. "Problem Solving / System Design" (evaluating scenarios, architecture, or analytical capabilities)
+4. "Behavioral / Leadership" (using the STAR method to evaluate team fit, conflict resolution, or leadership)
+5. "Wrap Up" (candidate questions, next steps)
+
+Your response must be a single, valid JSON object containing:
+- "sections": A list of section objects. Each object MUST contain:
+  - "name": Section title (string)
+  - "description": Focus of this section (string)
+  - "duration_minutes": Duration allocated (integer)
+  - "topics": Key concepts/technologies to cover in this section (list of strings)
+  - "questions_pool": A list of 2-3 tailored questions that could be asked in this section (list of strings)
+
+Format your output strictly as a JSON object. Do not include markdown codeblocks, leading or trailing text.
+JSON Structure:
+{{
+  "sections": [
+    {{
+      "name": "",
+      "description": "",
+      "duration_minutes": 5,
+      "topics": [],
+      "questions_pool": []
+    }}
+  ]
+}}
