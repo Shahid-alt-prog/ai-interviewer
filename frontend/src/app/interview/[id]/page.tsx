@@ -602,7 +602,7 @@ export default function ActiveInterviewPage({
   useEffect(() => {
     if (!hasJoinedRoom || isComplete) return;
 
-    const wsUrl = API_BASE_URL.replace(/^http/, "ws") + `/interviews/${interviewId}/ws`;
+    const wsUrl = API_BASE_URL.replace(/^https/, "wss").replace(/^http/, "ws") + `/interviews/${interviewId}/ws`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
