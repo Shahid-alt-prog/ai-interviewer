@@ -51,6 +51,12 @@ export default function ActiveInterviewPage({
   const [isTimeExpired, setIsTimeExpired] = useState(false);
   const [keyboardMode, setKeyboardMode] = useState(false);
   const [typedResponse, setTypedResponse] = useState("");
+  const wsRef = useRef<WebSocket | null>(null);
+  const keyboardModeRef = useRef(keyboardMode);
+
+  useEffect(() => {
+    keyboardModeRef.current = keyboardMode;
+  }, [keyboardMode]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -212,21 +218,23 @@ export default function ActiveInterviewPage({
         setIsSending(true);
         setAudioState("thinking");
         try {
-          const nextTurn = await interviewsApi.sendMessage(
-            interviewId,
-            "Interview time has expired. Conclude the interview."
-          );
-          setProgress(100);
-          setIsComplete(true);
-          setAudioState("idle");
-          const finishedMsg = "Thank you! Your interview time has expired, and the session is now complete. We are generating your report.";
-          setCurrentQuestion("");
-          speakText(finishedMsg);
+          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ message: "Interview time has expired. Conclude the interview." }));
+          } else {
+            // Fallback if WS not open
+            setProgress(100);
+            setIsComplete(true);
+            setAudioState("idle");
+            const finishedMsg = "Thank you! Your interview time has expired, and the session is now complete. We are generating your report.";
+            setCurrentQuestion("");
+            speakText(finishedMsg);
+            setIsSending(false);
+            isSendingRef.current = false;
+          }
         } catch (error) {
           console.error("Error auto-completing interview:", error);
           setIsComplete(true);
           setAudioState("idle");
-        } finally {
           setIsSending(false);
           isSendingRef.current = false;
         }
@@ -498,6 +506,56 @@ export default function ActiveInterviewPage({
     }
   };
 
+  // Setup WebSocket when room is joined
+  useEffect(() => {
+    if (!hasJoinedRoom || isComplete) return;
+
+    const wsUrl = API_BASE_URL.replace(/^http/, "ws") + `/interviews/${interviewId}/ws`;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onmessage = (event) => {
+      try {
+        const nextTurn = JSON.parse(event.data);
+        setProgress(nextTurn.interview_progress);
+
+        if (nextTurn.is_complete) {
+          setIsComplete(true);
+          setAudioState("idle");
+          const finishedMsg = "Thank you! The interview session is now complete. We are generating your report.";
+          setCurrentQuestion("");
+          speakText(finishedMsg);
+        } else {
+          setCurrentSection(nextTurn.section);
+          setCurrentQuestion(nextTurn.ai_message);
+          
+          setIsSending(false);
+          isSendingRef.current = false;
+
+          speakText(nextTurn.ai_message, () => {
+            if (!keyboardModeRef.current) {
+              setTimeout(() => {
+                startListening();
+              }, 600);
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Failed to parse websocket message", err);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error", error);
+      setIsSending(false);
+      isSendingRef.current = false;
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, [hasJoinedRoom, isComplete, interviewId]);
+
   // 4. Join Call Room Trigger
   const handleJoinCall = async () => {
     if (isJoiningRef.current) return;
@@ -612,42 +670,31 @@ export default function ActiveInterviewPage({
     setAudioState("thinking");
 
     try {
-      const nextTurn = await interviewsApi.sendMessage(interviewId, answerValue);
-      setProgress(nextTurn.interview_progress);
-
-      if (nextTurn.is_complete) {
-        setIsComplete(true);
-        setAudioState("idle");
-        
-        const finishedMsg = "Thank you! The interview session is now complete. We are generating your report.";
-        setCurrentQuestion("");
-        speakText(finishedMsg);
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ message: answerValue }));
       } else {
-        setCurrentSection(nextTurn.section);
-        setCurrentQuestion(nextTurn.ai_message);
-        
-        // Only trigger startListening if we are in voice mode
-        speakText(nextTurn.ai_message, () => {
-          if (!keyboardMode) {
-            // Small delay to allow iOS to transition audio session from speaking to listening
-            setTimeout(() => {
-              startListening();
-            }, 600);
-          }
-        });
+        console.error("WebSocket not connected");
+        alert("Connection lost. Please try reconnecting or refreshing the page.");
+        setAudioState("idle");
+        setIsSending(false);
+        isSendingRef.current = false;
+        if (!keyboardMode) {
+          setTimeout(() => {
+            startListening();
+          }, 600);
+        }
       }
     } catch (error: any) {
       console.error("Error sending response:", error);
       alert("Something went wrong. Please try sending your answer again.");
       setAudioState("idle");
+      setIsSending(false);
+      isSendingRef.current = false;
       if (!keyboardMode) {
         setTimeout(() => {
           startListening();
         }, 600);
       }
-    } finally {
-      setIsSending(false);
-      isSendingRef.current = false;
     }
   };
 
