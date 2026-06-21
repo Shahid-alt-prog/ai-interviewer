@@ -15,7 +15,7 @@ from app.core.database import Base, get_db
 from app.core.config import settings
 from app.main import app
 
-TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
+TEST_DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/ai_interviewer_test"
 
 settings.GROQ_API_KEY = ""
 settings.GEMINI_API_KEY = ""

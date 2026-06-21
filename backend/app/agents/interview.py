@@ -192,7 +192,9 @@ class InterviewAgent:
         # Rich persona system instructions
         question_enforcement = (
             "CRITICAL REQUIREMENT: You MUST always end your response ('ai_message') with a single, clear question "
-            "for the candidate, unless you are wrapping up or concluding the interview (where is_complete is true). "
+            "for the candidate, ending strictly with a question mark (?). If your response does not end with a "
+            "question mark (?), it is a critical system failure. You are strictly forbidden from ending your "
+            "response with a period or statement, unless you are wrapping up or concluding the interview (where is_complete is true). "
             "Never just react to or analyze their response without asking a follow-up or transition question."
         )
 
@@ -204,6 +206,12 @@ class InterviewAgent:
             "conversational and vary your transition/reaction patterns."
         )
 
+        contextual_memory_rule = (
+            "CONTEXTUAL MEMORY GRAPH: Stop rigidly following 'Intro -> Core -> Wrap Up'. "
+            "Listen to their answers, build a mental graph of their experience, and steer the "
+            "conversation naturally towards the most interesting areas."
+        )
+
         if interviewer_name == "Sarah":
             system_instruction = (
                 f"You are {interviewer_name}, a friendly but analytically sharp Technical Lead. "
@@ -212,7 +220,8 @@ class InterviewAgent:
                 "You NEVER sound like a corporate HR bot. You never step out of character.\n"
                 f"{question_enforcement}\n"
                 f"{repetition_ban}\n"
-                f"{transcription_handling}"
+                f"{transcription_handling}\n"
+                f"{contextual_memory_rule}"
             )
         elif interviewer_name == "Vikram":
             system_instruction = (
@@ -222,7 +231,8 @@ class InterviewAgent:
                 "You NEVER sound like a corporate HR bot. You never step out of character.\n"
                 f"{question_enforcement}\n"
                 f"{repetition_ban}\n"
-                f"{transcription_handling}"
+                f"{transcription_handling}\n"
+                f"{contextual_memory_rule}"
             )
         else:
             system_instruction = (
@@ -232,7 +242,8 @@ class InterviewAgent:
                 "You NEVER sound like a corporate HR bot. You never step out of character.\n"
                 f"{question_enforcement}\n"
                 f"{repetition_ban}\n"
-                f"{transcription_handling}"
+                f"{transcription_handling}\n"
+                f"{contextual_memory_rule}"
             )
 
         try:

@@ -1,11 +1,14 @@
 """Interview management endpoints utilizing the repository and service patterns."""
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+import json
+from app.core.database import async_session_factory
 
 from app.core.database import get_db
 from app.models.interview import InterviewStatus
@@ -29,6 +32,8 @@ from app.schemas.interview import (
     InterviewUpdate,
 )
 from app.schemas.report import ReportResponse, ReportUpdate
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -133,11 +138,13 @@ async def start_interview(
             is_complete=False,
         )
     except ValueError as e:
+        logger.error(f"Validation error starting interview {interview_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except Exception as e:
+        logger.exception(f"Unexpected error starting interview {interview_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred while starting the interview: {str(e)}",
@@ -173,15 +180,100 @@ async def send_message(
             is_complete=is_complete,
         )
     except ValueError as e:
+        logger.error(f"Validation error processing message for interview {interview_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except Exception as e:
+        logger.exception(f"Unexpected error processing message for interview {interview_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred during conversational processing: {str(e)}",
         )
+
+@router.websocket("/{interview_id}/ws")
+async def interview_websocket(
+    websocket: WebSocket,
+    interview_id: uuid.UUID,
+):
+    """WebSocket endpoint for real-time interview interaction."""
+    await websocket.accept()
+    try:
+        while True:
+            data = await websocket.receive_text()
+            try:
+                payload = json.loads(data)
+                action = payload.get("action")
+                
+                if action == "interrupt":
+                    message_text = payload.get("text", "")
+                    logger.info(f"Interview {interview_id} interrupted by candidate mid-sentence. Text: {message_text}")
+                    message_text = f"[Interrupted AI mid-sentence] {message_text}"
+                else:
+                    message_text = payload.get("message")
+
+                if not message_text:
+                    await websocket.send_json({"error": "Message is required."})
+                    continue
+                
+                async with async_session_factory() as session:
+                    # Manually inject dependencies for the websocket session
+                    service = InterviewService(
+                        db=session,
+                        interview_repo=InterviewRepository(session),
+                        candidate_repo=CandidateRepository(session),
+                        plan_repo=InterviewPlanRepository(session),
+                        question_repo=QuestionRepository(session),
+                        eval_repo=EvaluationRepository(session),
+                        interview_agent=InterviewAgent(GeminiService()),
+                        eval_agent=EvaluationAgent(GeminiService()),
+                        report_agent=ReportAgent(GeminiService()),
+                    )
+                    
+                    try:
+                        interview, next_question, is_complete = await service.process_candidate_message(
+                            interview_id=interview_id,
+                            candidate_message=message_text,
+                        )
+                        await session.commit()
+                        
+                        progress = 100.0
+                        if not is_complete and interview.started_at:
+                            elapsed = (datetime.now(timezone.utc).replace(tzinfo=None) - interview.started_at).total_seconds()
+                            total = interview.duration_minutes * 60
+                            progress = min(99.0, (elapsed / total) * 100)
+
+                        response = InterviewMessageResponse(
+                            interview_id=interview.id,
+                            question_id=next_question.id if next_question else uuid.uuid4(),
+                            ai_message=next_question.question_text if next_question else "Thank you. The interview is now complete. We are generating your feedback report.",
+                            section=next_question.section if next_question else "Wrap Up",
+                            is_follow_up=next_question.question_type == "follow_up" if next_question else False,
+                            interview_progress=progress,
+                            is_complete=is_complete,
+                        ).model_dump(mode="json")
+                        
+                        await websocket.send_json(response)
+                        
+                        if is_complete:
+                            await websocket.close(code=1000)
+                            break
+                    except ValueError as ve:
+                        await session.rollback()
+                        logger.error(f"Validation error in websocket for interview {interview_id}: {ve}")
+                        await websocket.send_json({"error": str(ve)})
+                    except Exception as e:
+                        await session.rollback()
+                        raise e
+            except json.JSONDecodeError:
+                await websocket.send_json({"error": "Invalid JSON format."})
+            except Exception as e:
+                logger.exception(f"Unexpected error in websocket for interview {interview_id}")
+                await websocket.send_json({"error": "Internal Server Error"})
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket client disconnected from interview {interview_id}")
+
 
 
 @router.get("/{interview_id}/report", response_model=ReportResponse)
@@ -198,6 +290,7 @@ async def get_report(
             try:
                 report = await service.generate_final_report(interview)
             except Exception as e:
+                logger.exception(f"Failed to generate final report for interview {interview_id}")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=f"Failed to dynamically generate scorecard report: {str(e)}",

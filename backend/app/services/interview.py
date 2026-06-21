@@ -395,6 +395,7 @@ class InterviewService:
             skills=candidate.skills or [],
             experience=candidate.experience or [],
             qa_history=qa_history,
+            conversation_history=interview.conversation_history or [],
         )
 
         # 3. Create Report in database

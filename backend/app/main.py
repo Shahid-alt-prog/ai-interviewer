@@ -69,6 +69,17 @@ def create_app() -> FastAPI:
     # Include API routes
     application.include_router(api_router, prefix="/api/v1")
 
+    from fastapi import Request
+    from fastapi.responses import JSONResponse
+
+    @application.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        logger.exception(f"Unhandled exception on {request.method} {request.url.path}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal Server Error"},
+        )
+
     return application
 
 

@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     )
 
     # Database
-    DATABASE_URL: str = "sqlite+aiosqlite:///./ai_interviewer.db"
-    DATABASE_URL_SYNC: str = "sqlite:///./ai_interviewer.db"
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/ai_interviewer"
+    DATABASE_URL_SYNC: str = "postgresql://postgres:postgres@localhost:5432/ai_interviewer"
 
     # App
     APP_ENV: str = "development"

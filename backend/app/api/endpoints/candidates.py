@@ -1,16 +1,20 @@
 """Candidate management endpoints using Clean Architecture repositories and services."""
+import logging
 import uuid
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.repositories.candidate import CandidateRepository
 from app.services.gemini import GeminiService
 from app.agents.resume import ResumeAgent
 from app.services.resume import ResumeService
 from app.schemas.candidate import CandidateCreate, CandidateResponse, CandidateUpdate
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -106,8 +110,21 @@ async def upload_resume(
             detail="Only PDF files are accepted.",
         )
 
+    if file.size and file.size > settings.MAX_RESUME_UPLOAD_BYTES:
+        logger.warning(f"Upload rejected: {file.filename} size ({file.size} bytes) exceeds limit.")
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Resume file is too large.",
+        )
+
     try:
         content = await file.read()
+        if len(content) > settings.MAX_RESUME_UPLOAD_BYTES:
+            logger.warning(f"Upload rejected after reading: {file.filename} exceeds limit.")
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Resume file is too large.",
+            )
         updated_candidate = await resume_service.parse_and_update_candidate(
             candidate_id=candidate_id,
             file_name=file.filename,
@@ -120,11 +137,13 @@ async def upload_resume(
             )
         return updated_candidate
     except ValueError as e:
+        logger.error(f"Validation error parsing resume for candidate {candidate_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),
         )
     except Exception as e:
+        logger.exception(f"Unexpected error parsing resume for candidate {candidate_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred while parsing the resume: {str(e)}",

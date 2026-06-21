@@ -22,6 +22,7 @@ class ReportAgent:
         skills: List[str],
         experience: List[Dict[str, Any]],
         qa_history: List[Dict[str, Any]],
+        conversation_history: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """Synthesize evaluations and compile the final candidate assessment report."""
         prompt_template = load_prompt("report_generator")
@@ -52,6 +53,14 @@ class ReportAgent:
                 f"----------------------------------------"
             )
         qa_transcript_evaluations = "\n".join(transcript_parts)
+
+        # Format full chronological conversation transcript
+        convo_parts = []
+        for entry in (conversation_history or []):
+            role = entry.get("role", "unknown").capitalize()
+            text_val = entry.get("text") or entry.get("content") or ""
+            convo_parts.append(f"{role}: {text_val}")
+        full_transcript = "\n".join(convo_parts) if convo_parts else "No direct conversation history recorded."
         
         prompt = prompt_template.format(
             job_description=job_description,
@@ -59,6 +68,7 @@ class ReportAgent:
             skills=skills_str,
             experience_summary=exp_summary,
             qa_transcript_evaluations=qa_transcript_evaluations,
+            full_transcript=full_transcript,
         )
         
         system_instruction = "You are a senior HR decision panel director. Synthesize interview logs into clear scorecard recommendations."

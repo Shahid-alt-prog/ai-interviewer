@@ -18,14 +18,14 @@ class ParsedResume(BaseModel):
 class CandidateCreate(BaseModel):
     """Schema for creating a new candidate."""
     name: str = Field(..., min_length=1, max_length=255)
-    email: str = Field(..., min_length=1, max_length=255)
+    email: EmailStr = Field(...)
     phone: Optional[str] = Field(None, max_length=50)
 
 
 class CandidateUpdate(BaseModel):
     """Schema for updating candidate information."""
     name: Optional[str] = Field(None, max_length=255)
-    email: Optional[str] = Field(None, max_length=255)
+    email: Optional[EmailStr] = Field(None)
     phone: Optional[str] = Field(None, max_length=50)
 
 
@@ -33,7 +33,7 @@ class CandidateResponse(BaseModel):
     """Schema for candidate API responses."""
     id: uuid.UUID
     name: str
-    email: str
+    email: EmailStr
     phone: Optional[str] = None
     resume_file_path: Optional[str] = None
     parsed_resume: Optional[ParsedResume] = None

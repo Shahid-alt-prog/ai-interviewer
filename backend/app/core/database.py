@@ -9,35 +9,14 @@ from sqlalchemy.orm import DeclarativeBase
 from app.core.config import settings
 
 db_url = settings.DATABASE_URL
-if db_url.startswith("postgresql://"):
-    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-
-is_sqlite = db_url.startswith("sqlite")
-
-engine_kwargs = {}
-if not is_sqlite:
-    engine_kwargs.update({
-        "pool_size": 20,
-        "max_overflow": 10,
-        "pool_pre_ping": True,
-    })
-
-from sqlalchemy import event
-from sqlalchemy.engine import Engine
 
 engine = create_async_engine(
     db_url,
     echo=settings.APP_DEBUG,
-    **engine_kwargs
+    pool_size=20,
+    max_overflow=10,
+    pool_pre_ping=True,
 )
-
-
-@event.listens_for(Engine, "connect")
-def set_sqlite_pragma(dbapi_connection, connection_record):
-    if is_sqlite:
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
 
 async_session_factory = async_sessionmaker(
     engine,
@@ -45,11 +24,9 @@ async_session_factory = async_sessionmaker(
     expire_on_commit=False,
 )
 
-
 class Base(DeclarativeBase):
     """Base class for all SQLAlchemy models."""
     pass
-
 
 async def get_db() -> AsyncSession:
     """Dependency that provides an async database session."""

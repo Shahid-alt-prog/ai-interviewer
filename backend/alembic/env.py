@@ -21,7 +21,8 @@ target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
-    url = config.get_main_option("sqlalchemy.url")
+    from app.core.database import db_url
+    url = db_url
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -41,10 +42,8 @@ def do_run_migrations(connection: Connection) -> None:
 async def run_async_migrations() -> None:
     """Run migrations in 'online' mode with async engine."""
     configuration = config.get_section(config.config_ini_section)
-    configuration["sqlalchemy.url"] = configuration.get(
-        "sqlalchemy.url",
-        "postgresql+asyncpg://postgres:postgres@db:5432/ai_interviewer",
-    )
+    from app.core.database import db_url
+    configuration["sqlalchemy.url"] = db_url
     connectable = async_engine_from_config(
         configuration, prefix="sqlalchemy.", poolclass=pool.NullPool
     )

@@ -94,6 +94,21 @@ export default function ActiveInterviewPage({
   const isJoiningRef = useRef(false);
   const isSendingRef = useRef(false);
 
+  // VAD & Interruption states
+  const isAiSpeakingRef = useRef(false);
+  useEffect(() => {
+    isAiSpeakingRef.current = isAiSpeaking;
+  }, [isAiSpeaking]);
+
+  const [isInterrupted, setIsInterrupted] = useState(false);
+  const typedResponseRef = useRef("");
+  useEffect(() => {
+    typedResponseRef.current = typedResponse;
+  }, [typedResponse]);
+
+  const vadAnimationRef = useRef<number | null>(null);
+  const handleInterruptRef = useRef<() => void>(() => {});
+
   // 1. Load Interview Context on Mount
   useEffect(() => {
     async function loadInterview() {
@@ -505,6 +520,83 @@ export default function ActiveInterviewPage({
       }
     }
   };
+
+  useEffect(() => {
+    handleInterruptRef.current = () => {
+      if (!isAiSpeakingRef.current) return;
+      
+      const currentText = transcriptionRef.current || interimTranscriptionRef.current || typedResponseRef.current || "";
+      
+      cancelSpeech();
+      setIsInterrupted(true);
+      setTimeout(() => setIsInterrupted(false), 3000);
+
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: "interrupt", message: currentText }));
+      }
+
+      if (!keyboardModeRef.current) {
+        setTimeout(() => {
+          startListening();
+        }, 100);
+      }
+    };
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !hasJoinedRoom) return;
+
+    let audioContext: AudioContext;
+    let analyser: AnalyserNode;
+    let microphone: MediaStreamAudioSourceNode;
+    let stream: MediaStream;
+
+    const setupVAD = async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 512;
+        analyser.minDecibels = -60;
+        analyser.maxDecibels = -10;
+        analyser.smoothingTimeConstant = 0.8;
+
+        microphone = audioContext.createMediaStreamSource(stream);
+        microphone.connect(analyser);
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        const detectVolume = () => {
+          if (!analyser) return;
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
+          }
+          const average = sum / dataArray.length;
+          
+          if (isAiSpeakingRef.current && average > 35) { 
+            handleInterruptRef.current();
+          }
+
+          vadAnimationRef.current = requestAnimationFrame(detectVolume);
+        };
+        detectVolume();
+      } catch (err) {
+        console.error("Error setting up VAD:", err);
+      }
+    };
+
+    setupVAD();
+
+    return () => {
+      if (vadAnimationRef.current) cancelAnimationFrame(vadAnimationRef.current);
+      if (stream) stream.getTracks().forEach(track => track.stop());
+      if (audioContext) {
+        if (audioContext.state !== "closed") audioContext.close();
+      }
+    };
+  }, [hasJoinedRoom]);
 
   // Setup WebSocket when room is joined
   useEffect(() => {
@@ -930,6 +1022,15 @@ export default function ActiveInterviewPage({
             {!isComplete && (
               <div className="w-full space-y-4 pt-4">
                 
+                {isInterrupted && (
+                  <div className="text-center p-3 rounded-xl bg-orange-500/10 border border-orange-500/20 max-w-sm mx-auto animate-fade-in shadow-sm">
+                    <span className="text-xs text-orange-400 font-bold flex items-center justify-center gap-2">
+                      <Volume2 className="w-4 h-4" />
+                      AI Paused (Interrupted)
+                    </span>
+                  </div>
+                )}
+
                 {/* AI Interviewer captions */}
                 {currentQuestion && (
                   <div className="text-center p-6 rounded-2xl bg-white/[0.02] border border-white/[0.04] max-w-xl mx-auto shadow-sm">
