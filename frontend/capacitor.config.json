@@ -1,0 +1,12 @@
+{
+  "appId": "com.shahid.aiinterviewer",
+  "appName": "AI Interviewer",
+  "webDir": "out",
+  "server": {
+    "url": "https://frontend-p05vsxumo-shahid-portfolio.vercel.app",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

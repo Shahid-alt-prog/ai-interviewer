@@ -532,7 +532,7 @@ export default function ActiveInterviewPage({
       setTimeout(() => setIsInterrupted(false), 3000);
 
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: "interrupt", message: currentText }));
+        wsRef.current.send(JSON.stringify({ action: "interrupt", text: currentText }));
       }
 
       if (!keyboardModeRef.current) {
@@ -575,7 +575,7 @@ export default function ActiveInterviewPage({
           }
           const average = sum / dataArray.length;
           
-          if (isAiSpeakingRef.current && average > 35) { 
+          if (isAiSpeakingRef.current && average > 10) { 
             handleInterruptRef.current();
           }
 
