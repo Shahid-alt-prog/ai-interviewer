@@ -22,7 +22,7 @@ import {
   Check,
   PhoneCall,
 } from "lucide-react";
-import { interviewsApi, candidatesApi, Candidate, InterviewDetail } from "@/lib/api";
+import { interviewsApi, candidatesApi, Candidate, InterviewDetail, API_BASE_URL } from "@/lib/api";
 
 export default function ActiveInterviewPage({
   params,
@@ -35,6 +35,8 @@ export default function ActiveInterviewPage({
   const [loading, setLoading] = useState(true);
   const [interview, setInterview] = useState<InterviewDetail | null>(null);
   const [candidate, setCandidate] = useState<Candidate | null>(null);
+  
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   
   // Session tracking states
   const [sessionStarted, setSessionStarted] = useState(false);
@@ -58,9 +60,14 @@ export default function ActiveInterviewPage({
   const parseBackendDateMs = (value: string | null | undefined) => {
     if (!value) return Number.NaN;
 
-    const normalized = value.trim().replace(" ", "T");
-    const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
-    return new Date(hasTimezone ? normalized : `${normalized}Z`).getTime();
+    const strValue = typeof value === "string" ? value : new Date(value).toISOString();
+    const normalized = strValue.trim().replace(" ", "T");
+    
+    // Truncate microsecond precision (e.g. .833862) to millisecond precision (.833) for cross-browser safety
+    const truncated = normalized.replace(/\.(\d{1,3})\d*/, ".$1");
+    
+    const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(truncated);
+    return new Date(hasTimezone ? truncated : `${truncated}Z`).getTime();
   };
 
   // Live Voice and Transcription States
@@ -137,9 +144,7 @@ export default function ActiveInterviewPage({
     loadInterview();
 
     return () => {
-      if (typeof window !== "undefined" && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
+      cancelSpeech();
       if (silenceTimerRef.current) {
         clearTimeout(silenceTimerRef.current);
       }
@@ -238,6 +243,7 @@ export default function ActiveInterviewPage({
 
     if (!SpeechRecognition) {
       console.warn("Speech recognition not supported in this browser.");
+      setKeyboardMode(true); // Automatically fallback to text input on unsupported devices/in-app webviews
       return;
     }
 
@@ -264,6 +270,15 @@ export default function ActiveInterviewPage({
       console.error("Speech recognition error:", event.error);
       setIsListening(false);
       setAudioState("idle");
+
+      if (event.error === "not-allowed" || event.error === "audio-capture") {
+        alert(
+          event.error === "not-allowed"
+            ? "Microphone access denied. Switching to keyboard mode so you can continue the interview."
+            : "No microphone device found. Switching to keyboard mode so you can continue the interview."
+        );
+        setKeyboardMode(true);
+      }
     };
 
     recognition.onend = () => {
@@ -335,14 +350,14 @@ export default function ActiveInterviewPage({
     };
   }, []);
 
-  // 4. Text-To-Speech (TTS) — human-like voice with persona matching
-  const speakText = (text: string, onEndCallback?: () => void) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) {
+  // 4. Text-To-Speech (TTS) — using the backend Sarvam AI endpoint
+  const speakText = async (text: string, onEndCallback?: () => void) => {
+    if (typeof window === "undefined") {
       onEndCallback?.();
       return;
     }
 
-    window.speechSynthesis.cancel();
+    cancelSpeech(); // Stop any currently playing audio
 
     // --- Text preprocessing for natural spoken delivery ---
     const cleanText = text
@@ -352,158 +367,102 @@ export default function ActiveInterviewPage({
       .replace(/^\s*-\s+/gm, "")       // Remove list dashes
       .replace(/\[.*?\]\(.*?\)/g, "")  // Remove markdown links
       .replace(/\.\.\./g, ". ")        // Replace ellipsis with natural pause
-      .replace(/,\s*/g, ", ")          // Normalise comma spacing
       .trim();
 
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-
-    // --- Smart voice selection ---
-    const voices = window.speechSynthesis.getVoices();
-
-    // Known male voice name keywords (cross-browser / cross-OS)
-    const maleKeywords = [
-      "david", "james", "daniel", "mark", "ryan", "thomas", "richard",
-      "rishi", "veena male", "google uk english male", "microsoft david",
-      "microsoft james", "microsoft mark", "aaron", "fred", "alex",
-      "google us english", // often male on some platforms
-    ];
-    const isMaleVoice = (v: SpeechSynthesisVoice) =>
-      maleKeywords.some((kw) => v.name.toLowerCase().includes(kw));
-
-    let selectedVoice: SpeechSynthesisVoice | undefined;
-
-    if (selectedInterviewer === "Vikram" || selectedInterviewer === "Alex") {
-      // Vikram & Alex are male — prioritise male voices strongly
-      const malePriority: Array<(v: SpeechSynthesisVoice) => boolean> = [
-        // en-IN male (neural/natural preferred)
-        (v) => v.lang.replace("_", "-").toLowerCase().startsWith("en-in") &&
-          isMaleVoice(v) &&
-          (v.name.toLowerCase().includes("natural") || v.name.toLowerCase().includes("neural")),
-        // en-IN male (any)
-        (v) => v.lang.replace("_", "-").toLowerCase().startsWith("en-in") && isMaleVoice(v),
-        // en-GB male neural (Daniel, James — deep British male voices)
-        (v) => v.lang.replace("_", "-").toLowerCase().startsWith("en-gb") &&
-          isMaleVoice(v) &&
-          (v.name.toLowerCase().includes("natural") || v.name.toLowerCase().includes("neural")),
-        // en-GB male (any)
-        (v) => v.lang.replace("_", "-").toLowerCase().startsWith("en-gb") && isMaleVoice(v),
-        // en-US male neural
-        (v) => v.lang.replace("_", "-").toLowerCase().startsWith("en-us") &&
-          isMaleVoice(v) &&
-          (v.name.toLowerCase().includes("natural") || v.name.toLowerCase().includes("neural")),
-        // en-US male (any)
-        (v) => v.lang.replace("_", "-").toLowerCase().startsWith("en-us") && isMaleVoice(v),
-        // any English male
-        (v) => v.lang.toLowerCase().startsWith("en") && isMaleVoice(v),
-        // final fallback: any English voice
-        (v) => v.lang.toLowerCase().startsWith("en"),
-      ];
-      for (const matcher of malePriority) {
-        selectedVoice = voices.find(matcher);
-        if (selectedVoice) break;
-      }
-    } else {
-      // Sarah (female/default) — prefer en-IN neural/natural, then fall back gracefully
-      const defaultPriority: Array<(v: SpeechSynthesisVoice) => boolean> = [
-        (v) => v.lang.replace("_", "-").toLowerCase().startsWith("en-in") &&
-          (v.name.toLowerCase().includes("natural") || v.name.toLowerCase().includes("neural") || v.name.toLowerCase().includes("online")),
-        (v) => v.lang.replace("_", "-").toLowerCase().startsWith("en-in") && v.name.toLowerCase().includes("google"),
-        (v) => v.lang.replace("_", "-").toLowerCase().startsWith("en-in"),
-        (v) => v.lang.replace("_", "-").toLowerCase().startsWith("en-gb") &&
-          (v.name.toLowerCase().includes("natural") || v.name.toLowerCase().includes("neural")),
-        (v) => v.lang.replace("_", "-").toLowerCase().startsWith("en-au") &&
-          (v.name.toLowerCase().includes("natural") || v.name.toLowerCase().includes("neural")),
-        (v) => v.lang.replace("_", "-").toLowerCase().startsWith("en-us") &&
-          (v.name.toLowerCase().includes("natural") || v.name.toLowerCase().includes("neural")),
-        (v) => v.lang.toLowerCase().startsWith("en") &&
-          (v.name.toLowerCase().includes("natural") || v.name.toLowerCase().includes("neural")),
-        (v) => v.lang.toLowerCase().startsWith("en"),
-      ];
-      for (const matcher of defaultPriority) {
-        selectedVoice = voices.find(matcher);
-        if (selectedVoice) break;
-      }
+    if (!cleanText) {
+      onEndCallback?.();
+      return;
     }
 
-    if (selectedVoice) utterance.voice = selectedVoice;
+    setIsAiSpeaking(true);
+    setAudioState("speaking");
 
-    // --- Persona-specific voice tuning ---
-    if (selectedInterviewer === "Sarah") {
-      utterance.rate = 1.0;    // Technical Lead: energetic, crisp
-      utterance.pitch = 1.1;
-    } else if (selectedInterviewer === "Vikram") {
-      utterance.rate = 0.88;   // Architect: deliberate, calm, deep
-      utterance.pitch = 0.9;   // Lower pitch reinforces male register
-    } else if (selectedInterviewer === "Alex") {
-      utterance.rate = 0.92;   // Alex HR: warm, relaxed, conversational
-      utterance.pitch = 0.95;  // Lower pitch reinforces male register
-    } else {
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-    }
-    utterance.volume = 1.0;
+    try {
+      const response = await fetch(`${API_BASE_URL}/tts/speak`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: cleanText,
+          interviewer: selectedInterviewer,
+        }),
+      });
 
-
-    // Chrome TTS stall fix — Chrome can freeze speech synthesis after ~14s
-    let resumeInterval: ReturnType<typeof setInterval> | null = null;
-    const startResumeHeartbeat = () => {
-      resumeInterval = setInterval(() => {
-        if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
-          window.speechSynthesis.pause();
-          window.speechSynthesis.resume();
-        }
-      }, 10000);
-    };
-    const stopResumeHeartbeat = () => {
-      if (resumeInterval) clearInterval(resumeInterval);
-    };
-
-    utterance.onstart = () => {
-      setIsAiSpeaking(true);
-      setAudioState("speaking");
-      startResumeHeartbeat();
-    };
-
-    utterance.onboundary = (event) => {
-      if (event.name === "word") {
-        setMouthFlap(true);
-        setTimeout(() => setMouthFlap(false), 100);
+      if (!response.ok) {
+        throw new Error(`TTS API failed: ${response.status}`);
       }
-    };
 
-    utterance.onend = () => {
-      stopResumeHeartbeat();
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      const audio = new Audio(audioUrl);
+      currentAudioRef.current = audio;
+
+      audio.onplay = () => {
+        // We could implement basic mouth flap here via intervals or web audio API analyzer, 
+        // but for now, simple random interval to simulate talking
+        const flapInterval = setInterval(() => {
+          setMouthFlap(Math.random() > 0.5);
+        }, 150);
+        (audio as any)._flapInterval = flapInterval;
+      };
+
+      audio.onended = () => {
+        if ((audio as any)._flapInterval) clearInterval((audio as any)._flapInterval);
+        setIsAiSpeaking(false);
+        setAudioState("idle");
+        setMouthFlap(false);
+        URL.revokeObjectURL(audioUrl);
+        onEndCallback?.();
+      };
+
+      audio.onerror = () => {
+        if ((audio as any)._flapInterval) clearInterval((audio as any)._flapInterval);
+        console.error("Audio playback error");
+        setIsAiSpeaking(false);
+        setAudioState("idle");
+        setMouthFlap(false);
+        URL.revokeObjectURL(audioUrl);
+        onEndCallback?.();
+      };
+
+      await audio.play();
+
+    } catch (error) {
+      console.error("TTS error:", error);
       setIsAiSpeaking(false);
       setAudioState("idle");
       setMouthFlap(false);
       onEndCallback?.();
-    };
+    }
+  };
 
-    utterance.onerror = (e) => {
-      stopResumeHeartbeat();
-      const errorMsg = e && (e as any).error;
-      if (errorMsg === "interrupted" || errorMsg === "canceled") {
-        console.warn("Speech synthesis interrupted (expected on cancel):", errorMsg);
-      } else {
-        console.error("Speech Synthesis error:", errorMsg ?? e);
+  const cancelSpeech = () => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current.currentTime = 0;
+      if ((currentAudioRef.current as any)._flapInterval) {
+         clearInterval((currentAudioRef.current as any)._flapInterval);
       }
-      setIsAiSpeaking(false);
-      setAudioState("idle");
-      setMouthFlap(false);
-      onEndCallback?.();
-    };
-
-    window.speechSynthesis.speak(utterance);
+      currentAudioRef.current = null;
+    }
+    
+    // Also cancel standard web speech synth just in case it was used previously
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    
+    setIsAiSpeaking(false);
+    setAudioState("idle");
+    setMouthFlap(false);
   };
 
   const startListening = () => {
 
     if (typeof window === "undefined" || !recognitionRef.current) return;
     
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-      setIsAiSpeaking(false);
-    }
+    cancelSpeech();
 
     try {
       transcriptionRef.current = "";
@@ -541,6 +500,18 @@ export default function ActiveInterviewPage({
   // 4. Join Call Room Trigger
   const handleJoinCall = async () => {
     if (isJoiningRef.current) return;
+
+    // Unlock Speech Synthesis context synchronously inside user gesture for mobile/iOS browsers
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      try {
+        const u = new SpeechSynthesisUtterance(" ");
+        u.volume = 0;
+        window.speechSynthesis.speak(u);
+      } catch (e) {
+        console.warn("SpeechSynthesis unlock failed:", e);
+      }
+    }
+
     isJoiningRef.current = true;
     setHasJoinedRoom(true);
     
@@ -560,7 +531,10 @@ export default function ActiveInterviewPage({
         // Auto speak greeting in real time
         setTimeout(() => {
           speakText(firstTurn.ai_message, () => {
-            startListening();
+            // Small delay to allow iOS to transition audio session from speaking to listening
+            setTimeout(() => {
+              startListening();
+            }, 600);
           });
         }, 400);
       } catch (error: any) {
@@ -576,7 +550,10 @@ export default function ActiveInterviewPage({
       if (currentQuestion && !isComplete) {
         setTimeout(() => {
           speakText(currentQuestion, () => {
-            startListening();
+            // Small delay to allow iOS to transition audio session from speaking to listening
+            setTimeout(() => {
+              startListening();
+            }, 600);
           });
         }, 300);
       }
@@ -587,6 +564,18 @@ export default function ActiveInterviewPage({
   // 5. Submit Answer Turn
   const handleSendAnswer = async (manualText?: string) => {
     if (isSendingRef.current) return;
+
+    // Unlock Speech Synthesis context synchronously inside user gesture for mobile/iOS browsers
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      try {
+        const u = new SpeechSynthesisUtterance(" ");
+        u.volume = 0;
+        window.speechSynthesis.speak(u);
+      } catch (e) {
+        console.warn("SpeechSynthesis unlock failed:", e);
+      }
+    }
+
     isSendingRef.current = true;
 
     if (silenceTimerRef.current) {
@@ -639,7 +628,10 @@ export default function ActiveInterviewPage({
         // Only trigger startListening if we are in voice mode
         speakText(nextTurn.ai_message, () => {
           if (!keyboardMode) {
-            startListening();
+            // Small delay to allow iOS to transition audio session from speaking to listening
+            setTimeout(() => {
+              startListening();
+            }, 600);
           }
         });
       }
@@ -648,7 +640,9 @@ export default function ActiveInterviewPage({
       alert("Something went wrong. Please try sending your answer again.");
       setAudioState("idle");
       if (!keyboardMode) {
-        startListening();
+        setTimeout(() => {
+          startListening();
+        }, 600);
       }
     } finally {
       setIsSending(false);
@@ -951,7 +945,7 @@ export default function ActiveInterviewPage({
                 <div className="flex gap-3 justify-center">
                   <Button
                     onClick={() => {
-                      if (window.speechSynthesis) window.speechSynthesis.cancel();
+                      cancelSpeech();
                       setKeyboardMode(false);
                       setTypedResponse("");
                     }}
@@ -1020,7 +1014,7 @@ export default function ActiveInterviewPage({
                 <button
                   onClick={() => {
                     stopListening();
-                    if (window.speechSynthesis) window.speechSynthesis.cancel();
+                    cancelSpeech();
                     setKeyboardMode(true);
                   }}
                   className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground hover:text-foreground transition cursor-pointer"
