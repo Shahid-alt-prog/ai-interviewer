@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, use } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -1156,9 +1157,11 @@ function RecruiterAnimoji({
       {/* Robot SVG */}
       <div className={`w-44 h-44 drop-shadow-[0_8px_32px_rgba(0,0,0,0.85)] z-10 transition-transform duration-500 ${speakingClass} ${thinkingClass}`}>
         <div className="relative w-full h-full rounded-full overflow-hidden border-4 border-white/10 shadow-[0_0_40px_rgba(0,0,0,0.5)]">
-          <img 
+          <Image 
             src={`/animojis/${name.toLowerCase()}.jpg`} 
             alt={`${name} Animoji`} 
+            width={176}
+            height={176}
             className="w-full h-full object-cover object-center"
           />
           {isSpeaking && (

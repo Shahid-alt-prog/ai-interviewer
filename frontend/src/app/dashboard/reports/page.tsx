@@ -55,15 +55,13 @@ export default function ReportsPage() {
   async function loadData() {
     try {
       setLoading(true);
-      const [interviewList, candidateList] = await Promise.all([
-        interviewsApi.list(),
+      const [completed, candidateList] = await Promise.all([
+        interviewsApi.list(0, 50, "completed"),
         candidatesApi.list(0, 100),
       ]);
 
       setCandidates(candidateList);
       
-      // Only care about completed interviews
-      const completed = interviewList.filter((i) => i.status === "completed");
       setInterviews(completed);
 
       // Fetch reports for all completed interviews in parallel

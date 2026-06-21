@@ -30,6 +30,19 @@ export default function DashboardPage() {
     averageScore: 0,
   });
 
+  // Request microphone permission on mount so it's pre-approved before starting an interview
+  useEffect(() => {
+    if (typeof window !== "undefined" && navigator?.mediaDevices?.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then((stream) => {
+          stream.getTracks().forEach((track) => track.stop());
+        })
+        .catch((err) => {
+          console.warn("Pre-requesting microphone permission failed/denied:", err);
+        });
+    }
+  }, []);
+
   useEffect(() => {
     async function fetchData() {
       try {
@@ -49,7 +62,7 @@ export default function DashboardPage() {
         let totalScore = 0;
         let reportsCount = 0;
         
-        const completedList = interviewList.filter((i) => i.status === "completed");
+        const completedList = interviewList.filter((i) => i.status === "completed").slice(0, 10);
         await Promise.all(
           completedList.map(async (i) => {
             try {
