@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import json
 from app.core.database import async_session_factory
+from app.core.config import IST
 
 from app.core.database import get_db
 from app.models.interview import InterviewStatus
@@ -115,7 +116,7 @@ async def get_interview(
             detail="Interview not found.",
         )
     # Dynamically inject current server time for frontend clock synchronization
-    interview.server_time = datetime.now(timezone.utc)
+    interview.server_time = datetime.now(IST)
     return interview
 
 
@@ -166,7 +167,7 @@ async def send_message(
 
         progress = 100.0
         if not is_complete and interview.started_at:
-            elapsed = (datetime.now(timezone.utc).replace(tzinfo=None) - interview.started_at).total_seconds()
+            elapsed = (datetime.now(IST).replace(tzinfo=None) - interview.started_at).total_seconds()
             total = interview.duration_minutes * 60
             progress = min(99.0, (elapsed / total) * 100)
 
@@ -231,7 +232,7 @@ async def interview_websocket(
                                 interview=interview,
                                 update_dict={
                                     "status": InterviewStatus.EVALUATING,
-                                    "completed_at": datetime.now(timezone.utc).replace(tzinfo=None),
+                                    "completed_at": datetime.now(IST).replace(tzinfo=None),
                                     "conversation_history": history,
                                 }
                             )
@@ -293,7 +294,7 @@ async def interview_websocket(
                         
                         progress = 100.0
                         if not is_complete and interview.started_at:
-                            elapsed = (datetime.now(timezone.utc).replace(tzinfo=None) - interview.started_at).total_seconds()
+                            elapsed = (datetime.now(IST).replace(tzinfo=None) - interview.started_at).total_seconds()
                             total = interview.duration_minutes * 60
                             progress = min(99.0, (elapsed / total) * 100)
 

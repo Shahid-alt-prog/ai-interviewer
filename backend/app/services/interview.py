@@ -22,7 +22,7 @@ from app.repositories.evaluation import EvaluationRepository as EvalRepo
 from app.agents.interview import InterviewAgent
 from app.agents.evaluation import EvaluationAgent
 from app.agents.report import ReportAgent
-from app.core.config import settings
+from app.core.config import settings, IST
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +156,7 @@ class InterviewService:
             plan = await self.plan_repo.create_plan(
                 interview_id=interview_id,
                 sections_data=sections,
-                plan_metadata={"generated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()},
+                plan_metadata={"generated_at": datetime.now(IST).replace(tzinfo=None).isoformat()},
             )
 
         # 3. Formulate first question
@@ -186,7 +186,7 @@ class InterviewService:
             interview=interview,
             update_dict={
                 "status": InterviewStatus.IN_PROGRESS,
-                "started_at": datetime.now(timezone.utc).replace(tzinfo=None),
+                "started_at": datetime.now(IST).replace(tzinfo=None),
                 "current_section": first_section.get("name", "Introduction"),
                 "conversation_history": [{"role": "interviewer", "text": opening_message}],
                 "covered_topics": [],
@@ -242,7 +242,7 @@ class InterviewService:
 
         # Precise wall-clock time accounting
         elapsed_seconds = (
-            datetime.now(timezone.utc).replace(tzinfo=None) - interview.started_at
+            datetime.now(IST).replace(tzinfo=None) - interview.started_at
         ).total_seconds()
         total_seconds = interview.duration_minutes * 60
         time_remaining_seconds = max(0.0, total_seconds - elapsed_seconds)
@@ -383,7 +383,7 @@ class InterviewService:
                 interview=interview,
                 update_dict={
                     "status": InterviewStatus.EVALUATING,
-                    "completed_at": datetime.now(timezone.utc).replace(tzinfo=None),
+                    "completed_at": datetime.now(IST).replace(tzinfo=None),
                     "conversation_history": history,
                 }
             )

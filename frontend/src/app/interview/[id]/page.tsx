@@ -71,7 +71,7 @@ export default function ActiveInterviewPage({
     const truncated = normalized.replace(/\.(\d{1,3})\d*/, ".$1");
     
     const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(truncated);
-    return new Date(hasTimezone ? truncated : `${truncated}Z`).getTime();
+    return new Date(hasTimezone ? truncated : `${truncated}+05:30`).getTime();
   };
 
   // Live Voice and Transcription States
@@ -449,8 +449,15 @@ export default function ActiveInterviewPage({
 
     try {
       const url = `${API_BASE_URL}/tts/speak?text=${encodeURIComponent(cleanText)}&interviewer=${encodeURIComponent(selectedInterviewer)}`;
-      const audio = new Audio(url);
-      currentAudioRef.current = audio;
+      
+      let audio = currentAudioRef.current;
+      if (!audio) {
+        audio = new Audio();
+        currentAudioRef.current = audio;
+      }
+      
+      audio.src = url;
+      audio.load();
 
       audio.onplay = () => {
         const flapInterval = setInterval(() => {
@@ -490,11 +497,13 @@ export default function ActiveInterviewPage({
   const cancelSpeech = () => {
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
-      currentAudioRef.current.currentTime = 0;
+      try {
+        currentAudioRef.current.currentTime = 0;
+      } catch (e) {}
       if ((currentAudioRef.current as any)._flapInterval) {
          clearInterval((currentAudioRef.current as any)._flapInterval);
       }
-      currentAudioRef.current = null;
+      // Keep currentAudioRef.current intact so we can reuse the same unlocked audio element!
     }
     
     // Also cancel standard web speech synth just in case it was used previously

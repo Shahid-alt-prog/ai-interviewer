@@ -1,6 +1,7 @@
 """Question and Response repository for managing interview Q&A records."""
 import uuid
 from datetime import datetime, timezone
+from app.core.config import IST
 from typing import List, Optional
 
 from sqlalchemy import select
@@ -42,7 +43,7 @@ class QuestionRepository:
             intent=intent,
             expected_topics=expected_topics or [],
             embedding=embedding,
-            asked_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            asked_at=datetime.now(IST).replace(tzinfo=None),
         )
         self.db.add(question)
         await self.db.flush()
@@ -94,7 +95,7 @@ class QuestionRepository:
             sentiment=sentiment,
             key_topics=key_topics or [],
             embedding=embedding,
-            responded_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            responded_at=datetime.now(IST).replace(tzinfo=None),
         )
         self.db.add(response)
         await self.db.flush()

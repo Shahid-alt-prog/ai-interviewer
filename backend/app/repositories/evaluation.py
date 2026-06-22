@@ -1,6 +1,7 @@
 """Evaluation and Report repository for managing scores, feedback, and final assessments."""
 import uuid
 from datetime import datetime, timezone
+from app.core.config import IST
 from typing import Optional
 
 from sqlalchemy import select
@@ -49,7 +50,7 @@ class EvaluationRepository:
             follow_up_reason=follow_up_reason,
             evaluation_reasoning=evaluation_reasoning,
             raw_ai_response=raw_ai_response,
-            evaluated_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            evaluated_at=datetime.now(IST).replace(tzinfo=None),
         )
         self.db.add(evaluation)
         await self.db.flush()
@@ -97,7 +98,7 @@ class EvaluationRepository:
             detailed_feedback=detailed_feedback or {},
             section_scores=section_scores or {},
             raw_ai_response=raw_ai_response,
-            generated_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            generated_at=datetime.now(IST).replace(tzinfo=None),
         )
         self.db.add(report)
         await self.db.flush()

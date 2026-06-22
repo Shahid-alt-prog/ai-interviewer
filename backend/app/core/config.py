@@ -1,8 +1,12 @@
 """Application configuration using pydantic-settings."""
 from typing import List
+from datetime import timezone, timedelta
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Indian Standard Time (IST) timezone
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 class Settings(BaseSettings):
