@@ -85,7 +85,7 @@ async def update_candidate(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Candidate not found.",
         )
-    
+
     if update_data.email and update_data.email != candidate.email:
         existing = await repo.get_by_email(update_data.email)
         if existing:
@@ -110,12 +110,8 @@ async def upload_resume(
             detail="Only PDF files are accepted.",
         )
 
-    if file.size and file.size > settings.MAX_RESUME_UPLOAD_BYTES:
-        logger.warning(f"Upload rejected: {file.filename} size ({file.size} bytes) exceeds limit.")
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Resume file is too large.",
-        )
+    # Removed size check for non-existent attribute `file.size`
+    # The size is verified after reading the content below.
 
     try:
         content = await file.read()
@@ -163,3 +159,38 @@ async def delete_candidate(
             detail="Candidate not found.",
         )
     await repo.delete(candidate)
+
+
+@router.get("/{candidate_id}/resume/download")
+async def download_resume(
+    candidate_id: uuid.UUID,
+    repo: CandidateRepository = Depends(get_candidate_repo),
+):
+    """Download or view the candidate's resume PDF directly."""
+    from fastapi.responses import FileResponse
+    import os
+    
+    candidate = await repo.get_by_id(candidate_id)
+    if not candidate or not candidate.resume_file_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resume not found or not uploaded yet.",
+        )
+    
+    file_path = candidate.resume_file_path
+    local_path = os.path.join(os.getcwd(), file_path)
+    
+    if not os.path.exists(local_path):
+        # Fallback to check relative to root uploads
+        local_path = os.path.join(os.getcwd(), "..", file_path)
+        if not os.path.exists(local_path):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Resume file not found on disk. It may have been cleared.",
+            )
+        
+    return FileResponse(
+        path=local_path,
+        media_type="application/pdf",
+        filename=os.path.basename(local_path)
+    )

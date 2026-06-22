@@ -206,6 +206,59 @@ async def interview_websocket(
                 payload = json.loads(data)
                 action = payload.get("action")
                 
+                if action == "tab_switch":
+                    logger.info(f"Interview {interview_id} terminated due to candidate tab switch.")
+                    async with async_session_factory() as session:
+                        service = InterviewService(
+                            db=session,
+                            interview_repo=InterviewRepository(session),
+                            candidate_repo=CandidateRepository(session),
+                            plan_repo=InterviewPlanRepository(session),
+                            question_repo=QuestionRepository(session),
+                            eval_repo=EvaluationRepository(session),
+                            interview_agent=InterviewAgent(GeminiService()),
+                            eval_agent=EvaluationAgent(GeminiService()),
+                            report_agent=ReportAgent(GeminiService()),
+                        )
+                        interview = await service.interview_repo.get_by_id(interview_id, load_relations=True)
+                        if interview and interview.status == InterviewStatus.IN_PROGRESS:
+                            history = interview.conversation_history or []
+                            history.append({
+                                "role": "system",
+                                "text": "[Interview terminated immediately: Candidate switched tabs/windows during the session.]"
+                            })
+                            await service.interview_repo.update(
+                                interview=interview,
+                                update_dict={
+                                    "status": InterviewStatus.EVALUATING,
+                                    "completed_at": datetime.now(timezone.utc).replace(tzinfo=None),
+                                    "conversation_history": history,
+                                }
+                            )
+                            existing_report = await service.eval_repo.get_report_by_interview_id(interview_id)
+                            if not existing_report:
+                                await service.generate_final_report(interview)
+                            
+                            await service.interview_repo.update(
+                                interview=interview,
+                                update_dict={"status": InterviewStatus.COMPLETED}
+                            )
+                            await session.commit()
+                            
+                            response = {
+                                "interview_id": str(interview.id),
+                                "question_id": str(uuid.uuid4()),
+                                "ai_message": "The interview was immediately terminated because you navigated away from the page.",
+                                "section": "Wrap Up",
+                                "is_follow_up": False,
+                                "interview_progress": 100.0,
+                                "is_complete": True,
+                            }
+                            await websocket.send_json(response)
+                        
+                        await websocket.close(code=1000)
+                        break
+
                 if action == "interrupt":
                     message_text = payload.get("text", "")
                     logger.info(f"Interview {interview_id} interrupted by candidate mid-sentence. Text: {message_text}")

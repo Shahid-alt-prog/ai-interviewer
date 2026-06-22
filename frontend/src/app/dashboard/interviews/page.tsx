@@ -73,10 +73,12 @@ export default function InterviewsPage() {
   async function fetchData() {
     try {
       setLoading(true);
-      const [interviewList, candidateList] = await Promise.all([
+      const [interviewData, candidateData] = await Promise.all([
         interviewsApi.list(),
         candidatesApi.list(0, 100),
       ]);
+      const interviewList = interviewData || [];
+      const candidateList = candidateData || [];
       setInterviews(interviewList);
       setCandidates(candidateList);
       if (candidateList.length > 0) {
@@ -105,6 +107,9 @@ export default function InterviewsPage() {
     try {
       // Fetch detail interview to get the job_description
       const detail = await interviewsApi.get(interview.id);
+      if (!detail) {
+        throw new Error("Failed to load interview details.");
+      }
       setSelectedInterview(interview);
       setEditFormData({
         title: detail.title,
@@ -249,7 +254,7 @@ export default function InterviewsPage() {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Interviews Scheduler</h1>
           <p className="text-muted-foreground mt-1">

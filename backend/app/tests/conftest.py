@@ -11,16 +11,29 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.core.database import Base, get_db
+from app.core.database import Base, get_db, is_postgres_running
 from app.core.config import settings
 from app.main import app
 
 TEST_DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/ai_interviewer_test"
 
+if not is_postgres_running(TEST_DATABASE_URL):
+    TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
 settings.GROQ_API_KEY = ""
 settings.GEMINI_API_KEY = ""
 
 engine_test = create_async_engine(TEST_DATABASE_URL, echo=False)
+
+from sqlalchemy import event
+
+@event.listens_for(engine_test.sync_engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    if TEST_DATABASE_URL.startswith("sqlite"):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
 async_session_test = async_sessionmaker(
     engine_test, class_=AsyncSession, expire_on_commit=False
 )

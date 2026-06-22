@@ -49,7 +49,7 @@ class InterviewSection(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     plan_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("interview_plans.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True), ForeignKey("interview_plans.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -17,10 +17,13 @@ import { interviewsApi, candidatesApi } from "@/lib/api";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [candidateList, interviewList] = await Promise.all([
+  const [candidatesData, interviewsData] = await Promise.all([
     candidatesApi.list(0, 100),
     interviewsApi.list(0, 100),
   ]);
+
+  const candidateList = candidatesData || [];
+  const interviewList = interviewsData || [];
 
   const completed = interviewList.filter((i) => i.status === "completed" || i.status === "evaluating");
 
@@ -103,7 +106,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8 animate-fade-in font-sans">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-4xl font-extrabold tracking-tight text-foreground">Overview</h1>
           <p className="text-muted-foreground mt-1 text-lg">

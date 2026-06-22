@@ -22,7 +22,7 @@ import {
   ExternalLink,
   CheckCircle,
 } from "lucide-react";
-import { candidatesApi, Candidate, getFileUrl } from "@/lib/api";
+import { candidatesApi, Candidate, getFileUrl, API_BASE_URL } from "@/lib/api";
 
 export default function CandidatesPage() {
   const [loading, setLoading] = useState(true);
@@ -53,9 +53,10 @@ export default function CandidatesPage() {
     try {
       await candidatesApi.delete(candidateId);
       const data = await candidatesApi.list();
-      setCandidates(data);
-      if (data.length > 0) {
-        setSelectedCandidate(data[0]);
+      const candidatesList = data || [];
+      setCandidates(candidatesList);
+      if (candidatesList.length > 0) {
+        setSelectedCandidate(candidatesList[0]);
       } else {
         setSelectedCandidate(null);
       }
@@ -105,11 +106,12 @@ export default function CandidatesPage() {
     try {
       setLoading(true);
       const data = await candidatesApi.list();
-      setCandidates(data);
-      if (data.length > 0 && !selectedCandidate) {
-        setSelectedCandidate(data[0]);
+      const candidatesList = data || [];
+      setCandidates(candidatesList);
+      if (candidatesList.length > 0 && !selectedCandidate) {
+        setSelectedCandidate(candidatesList[0]);
       } else if (selectedCandidate) {
-        const updated = data.find((c) => c.id === selectedCandidate.id);
+        const updated = candidatesList.find((c) => c.id === selectedCandidate.id);
         if (updated) setSelectedCandidate(updated);
       }
     } catch (error) {
@@ -144,6 +146,10 @@ export default function CandidatesPage() {
         email: formData.email,
         phone: formData.phone || undefined,
       });
+
+      if (!candidate) {
+        throw new Error("Failed to create candidate profile.");
+      }
 
       // 2. Upload resume if selected
       if (resumeFile) {
@@ -198,7 +204,7 @@ export default function CandidatesPage() {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Candidate Directory</h1>
           <p className="text-muted-foreground mt-1">
@@ -284,7 +290,7 @@ export default function CandidatesPage() {
         <div className="lg:col-span-7">
           {selectedCandidate ? (
             <Card className="glass border-border">
-              <CardHeader className="border-b border-white/[0.05] pb-6 flex flex-row items-start justify-between">
+              <CardHeader className="border-b border-white/[0.05] pb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-2xl font-bold tracking-tight text-foreground">
                     {selectedCandidate.name}
@@ -306,7 +312,7 @@ export default function CandidatesPage() {
                     </span>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap gap-2 w-full md:w-auto">
                   <input
                     type="file"
                     accept=".pdf"
@@ -318,7 +324,7 @@ export default function CandidatesPage() {
                     variant="outline"
                     disabled={isDetailUploading}
                     onClick={() => detailFileInputRef.current?.click()}
-                    className="flex items-center gap-1.5 h-9 rounded-lg border-border text-xs cursor-pointer hover:bg-white/5"
+                    className="flex items-center justify-center gap-1.5 h-9 rounded-lg border-border text-xs cursor-pointer hover:bg-white/5 w-full md:w-auto"
                   >
                     {isDetailUploading ? (
                       <Loader2 className="w-4.5 h-4.5 animate-spin text-primary" />
@@ -330,13 +336,14 @@ export default function CandidatesPage() {
                   
                   {selectedCandidate.resume_file_path && (
                     <a
-                      href={getFileUrl(selectedCandidate.resume_file_path)}
+                      href={`${API_BASE_URL}/candidates/${selectedCandidate.id}/resume/download`}
                       target="_blank"
                       rel="noopener noreferrer"
+                      className="w-full md:w-auto"
                     >
                       <Button
                         variant="outline"
-                        className="flex items-center gap-1.5 h-9 rounded-lg border-border text-xs cursor-pointer hover:bg-white/5 text-emerald-400 hover:text-emerald-300"
+                        className="flex items-center justify-center gap-1.5 h-9 rounded-lg border-border text-xs cursor-pointer hover:bg-white/5 text-emerald-400 hover:text-emerald-300 w-full"
                       >
                         <FileText className="w-4.5 h-4.5" />
                         View PDF
@@ -347,7 +354,7 @@ export default function CandidatesPage() {
                   <Button
                     variant="outline"
                     onClick={handleOpenEditModal}
-                    className="flex items-center gap-1.5 h-9 rounded-lg border-border text-xs cursor-pointer hover:bg-white/5 text-sky-400 hover:text-sky-300"
+                    className="flex items-center justify-center gap-1.5 h-9 rounded-lg border-border text-xs cursor-pointer hover:bg-white/5 text-sky-400 hover:text-sky-300 w-full md:w-auto"
                   >
                     Edit Details
                   </Button>
@@ -355,7 +362,7 @@ export default function CandidatesPage() {
                   <Button
                     variant="outline"
                     onClick={() => handleDeleteCandidate(selectedCandidate.id)}
-                    className="flex items-center gap-1.5 h-9 rounded-lg border-border text-xs cursor-pointer hover:bg-white/5 text-red-400 hover:text-red-300"
+                    className="flex items-center justify-center gap-1.5 h-9 rounded-lg border-border text-xs cursor-pointer hover:bg-white/5 text-red-400 hover:text-red-300 w-full md:w-auto"
                   >
                     Delete
                   </Button>

@@ -40,7 +40,7 @@ class ApiError extends Error {
   }
 }
 
-async function apiRequest<T>(endpoint: string, options: ApiOptions = {}): Promise<T> {
+async function apiRequest<T>(endpoint: string, options: ApiOptions = {}): Promise<T | null> {
   const { method = "GET", body, headers = {}, ignore404 = false } = options;
 
   const config: RequestInit = {

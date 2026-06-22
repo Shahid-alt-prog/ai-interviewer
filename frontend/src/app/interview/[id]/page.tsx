@@ -49,14 +49,11 @@ export default function ActiveInterviewPage({
   const [selectedInterviewer, setSelectedInterviewer] = useState("Alex");
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [isTimeExpired, setIsTimeExpired] = useState(false);
-  const [keyboardMode, setKeyboardMode] = useState(false);
-  const [typedResponse, setTypedResponse] = useState("");
+  const keyboardMode = false;
+  const typedResponse = "";
+  const setTypedResponse = (val: string) => {};
   const wsRef = useRef<WebSocket | null>(null);
-  const keyboardModeRef = useRef(keyboardMode);
-
-  useEffect(() => {
-    keyboardModeRef.current = keyboardMode;
-  }, [keyboardMode]);
+  const keyboardModeRef = { current: false };
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -109,12 +106,57 @@ export default function ActiveInterviewPage({
   const vadAnimationRef = useRef<number | null>(null);
   const handleInterruptRef = useRef<() => void>(() => {});
 
+  const handleTabSwitchRef = useRef<() => void>(() => {});
+  
+  useEffect(() => {
+    handleTabSwitchRef.current = () => {
+      if (isComplete) return;
+      console.warn("User switched tab during interview. Terminating interview immediately.");
+      
+      stopListening();
+      cancelSpeech();
+      
+      setIsComplete(true);
+      setAudioState("idle");
+      const msg = "The interview was terminated because you navigated away from the page or switched tabs.";
+      setCurrentQuestion(msg);
+      
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        try {
+          wsRef.current.send(JSON.stringify({ action: "tab_switch" }));
+        } catch (err) {
+          console.error("Error sending tab_switch event:", err);
+        }
+      }
+    };
+  });
+
+  useEffect(() => {
+    if (!hasJoinedRoom || isComplete) return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        handleTabSwitchRef.current();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [hasJoinedRoom, isComplete]);
+
   // 1. Load Interview Context on Mount
   useEffect(() => {
     async function loadInterview() {
       try {
         setLoading(true);
         const data = await interviewsApi.get(interviewId);
+        if (!data) {
+          console.error("Interview not found");
+          setLoading(false);
+          return;
+        }
         setInterview(data);
 
         // Pre-select recommended recruiter personality based on interview type or existing session metadata
@@ -131,6 +173,11 @@ export default function ActiveInterviewPage({
         }
 
         const cand = await candidatesApi.get(data.candidate_id);
+        if (!cand) {
+          console.error("Candidate not found");
+          setLoading(false);
+          return;
+        }
         setCandidate(cand);
 
         if (data.status === "in_progress" || data.status === "completed" || data.status === "evaluating") {
@@ -267,7 +314,7 @@ export default function ActiveInterviewPage({
 
     if (!SpeechRecognition) {
       console.warn("Speech recognition not supported in this browser.");
-      setKeyboardMode(true); // Automatically fallback to text input on unsupported devices/in-app webviews
+      alert("Speech recognition is not supported in this browser. Please use Google Chrome, Microsoft Edge, or Apple Safari for a voice-only interview.");
       return;
     }
 
@@ -298,10 +345,9 @@ export default function ActiveInterviewPage({
       if (event.error === "not-allowed" || event.error === "audio-capture") {
         alert(
           event.error === "not-allowed"
-            ? "Microphone access denied. Switching to keyboard mode so you can continue the interview."
-            : "No microphone device found. Switching to keyboard mode so you can continue the interview."
+            ? "Microphone access is denied. Microphone permission is strictly required for this voice-only interview. Please allow microphone permissions in your browser settings and refresh the page."
+            : "No microphone device was detected. A microphone is required for this voice-only interview. Please check your connection and refresh the page."
         );
-        setKeyboardMode(true);
       }
     };
 
@@ -374,7 +420,7 @@ export default function ActiveInterviewPage({
     };
   }, []);
 
-  // 4. Text-To-Speech (TTS) — using the backend Sarvam AI endpoint
+  // 4. Text-To-Speech (TTS) — using the backend Edge TTS streaming endpoint
   const speakText = async (text: string, onEndCallback?: () => void) => {
     if (typeof window === "undefined") {
       onEndCallback?.();
@@ -402,30 +448,11 @@ export default function ActiveInterviewPage({
     setAudioState("speaking");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/tts/speak`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text: cleanText,
-          interviewer: selectedInterviewer,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`TTS API failed: ${response.status}`);
-      }
-
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-
-      const audio = new Audio(audioUrl);
+      const url = `${API_BASE_URL}/tts/speak?text=${encodeURIComponent(cleanText)}&interviewer=${encodeURIComponent(selectedInterviewer)}`;
+      const audio = new Audio(url);
       currentAudioRef.current = audio;
 
       audio.onplay = () => {
-        // We could implement basic mouth flap here via intervals or web audio API analyzer, 
-        // but for now, simple random interval to simulate talking
         const flapInterval = setInterval(() => {
           setMouthFlap(Math.random() > 0.5);
         }, 150);
@@ -437,24 +464,22 @@ export default function ActiveInterviewPage({
         setIsAiSpeaking(false);
         setAudioState("idle");
         setMouthFlap(false);
-        URL.revokeObjectURL(audioUrl);
         onEndCallback?.();
       };
 
-      audio.onerror = () => {
+      audio.onerror = (e) => {
         if ((audio as any)._flapInterval) clearInterval((audio as any)._flapInterval);
-        console.error("Audio playback error");
+        console.error("Audio playback error:", e);
         setIsAiSpeaking(false);
         setAudioState("idle");
         setMouthFlap(false);
-        URL.revokeObjectURL(audioUrl);
         onEndCallback?.();
       };
 
       await audio.play();
 
     } catch (error) {
-      console.error("TTS error:", error);
+      console.error("TTS play error:", error);
       setIsAiSpeaking(false);
       setAudioState("idle");
       setMouthFlap(false);
@@ -483,7 +508,6 @@ export default function ActiveInterviewPage({
   };
 
   const startListening = () => {
-
     if (typeof window === "undefined" || !recognitionRef.current) return;
     
     cancelSpeech();
@@ -497,7 +521,18 @@ export default function ActiveInterviewPage({
         clearTimeout(silenceTimerRef.current);
         silenceTimerRef.current = null;
       }
-      recognitionRef.current.start();
+      
+      // Delay speech recognition start slightly to allow the VAD microphone stream to fully release on mobile
+      setTimeout(() => {
+        try {
+          if (recognitionRef.current) {
+            recognitionRef.current.start();
+            console.log("Speech recognition started.");
+          }
+        } catch (err) {
+          console.warn("SpeechRecognition start failed:", err);
+        }
+      }, 200);
     } catch (e) {
       console.warn(e);
     }
@@ -525,7 +560,7 @@ export default function ActiveInterviewPage({
     handleInterruptRef.current = () => {
       if (!isAiSpeakingRef.current) return;
       
-      const currentText = transcriptionRef.current || interimTranscriptionRef.current || typedResponseRef.current || "";
+      const currentText = transcriptionRef.current || interimTranscriptionRef.current || "";
       
       cancelSpeech();
       setIsInterrupted(true);
@@ -535,16 +570,14 @@ export default function ActiveInterviewPage({
         wsRef.current.send(JSON.stringify({ action: "interrupt", text: currentText }));
       }
 
-      if (!keyboardModeRef.current) {
-        setTimeout(() => {
-          startListening();
-        }, 100);
-      }
+      setTimeout(() => {
+        startListening();
+      }, 100);
     };
   });
 
   useEffect(() => {
-    if (typeof window === "undefined" || !hasJoinedRoom) return;
+    if (typeof window === "undefined" || !hasJoinedRoom || !isAiSpeaking) return;
 
     let audioContext: AudioContext;
     let analyser: AnalyserNode;
@@ -553,7 +586,14 @@ export default function ActiveInterviewPage({
 
     const setupVAD = async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Request echo-cancelled and noise-suppressed microphone audio stream
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
         audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
         analyser = audioContext.createAnalyser();
         analyser.fftSize = 512;
@@ -575,7 +615,9 @@ export default function ActiveInterviewPage({
           }
           const average = sum / dataArray.length;
           
-          if (isAiSpeakingRef.current && average > 10) { 
+          // Interrupt AI if average amplitude exceeds threshold of 15 (tuned for voice activity)
+          if (isAiSpeakingRef.current && average > 15) { 
+            console.log("Candidate speaking detected (volume average:", average, "). Interrupting AI.");
             handleInterruptRef.current();
           }
 
@@ -591,12 +633,17 @@ export default function ActiveInterviewPage({
 
     return () => {
       if (vadAnimationRef.current) cancelAnimationFrame(vadAnimationRef.current);
-      if (stream) stream.getTracks().forEach(track => track.stop());
-      if (audioContext) {
-        if (audioContext.state !== "closed") audioContext.close();
+      if (stream) {
+        stream.getTracks().forEach(track => {
+          track.stop();
+          console.log("VAD microphone track stopped and released.");
+        });
+      }
+      if (audioContext && audioContext.state !== "closed") {
+        audioContext.close();
       }
     };
-  }, [hasJoinedRoom]);
+  }, [hasJoinedRoom, isAiSpeaking]);
 
   // Setup WebSocket when room is joined
   useEffect(() => {
@@ -652,14 +699,32 @@ export default function ActiveInterviewPage({
   const handleJoinCall = async () => {
     if (isJoiningRef.current) return;
 
-    // Unlock Speech Synthesis context synchronously inside user gesture for mobile/iOS browsers
-    if (typeof window !== "undefined" && window.speechSynthesis) {
+    // Unlock HTMLAudioElement and webkitSpeechRecognition inside user gesture for mobile/iOS browsers
+    if (typeof window !== "undefined") {
       try {
-        const u = new SpeechSynthesisUtterance(" ");
-        u.volume = 0;
-        window.speechSynthesis.speak(u);
+        const audio = currentAudioRef.current || new Audio();
+        audio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"; // 1 byte silent wav
+        await audio.play();
+        currentAudioRef.current = audio;
+        console.log("Audio playback context unlocked via user gesture");
       } catch (e) {
-        console.warn("SpeechSynthesis unlock failed:", e);
+        console.warn("Audio unlock failed:", e);
+      }
+
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.start();
+          setTimeout(() => {
+            try {
+              if (recognitionRef.current) {
+                recognitionRef.current.stop();
+              }
+            } catch (e) {}
+          }, 100);
+          console.log("SpeechRecognition unlocked via user gesture");
+        } catch (e) {
+          console.warn("SpeechRecognition unlock failed:", e);
+        }
       }
     }
 
@@ -671,13 +736,18 @@ export default function ActiveInterviewPage({
       try {
         setLoading(true);
         const firstTurn = await interviewsApi.start(interviewId, selectedInterviewer);
+        if (!firstTurn) {
+          throw new Error("Failed to start the interview session.");
+        }
         setSessionStarted(true);
         setCurrentQuestion(firstTurn.ai_message);
         setCurrentSection(firstTurn.section);
         setProgress(0);
         
         const updatedDetails = await interviewsApi.get(interviewId);
-        setInterview(updatedDetails);
+        if (updatedDetails) {
+          setInterview(updatedDetails);
+        }
 
         // Auto speak greeting in real time
         setTimeout(() => {
@@ -716,14 +786,15 @@ export default function ActiveInterviewPage({
   const handleSendAnswer = async (manualText?: string) => {
     if (isSendingRef.current) return;
 
-    // Unlock Speech Synthesis context synchronously inside user gesture for mobile/iOS browsers
-    if (typeof window !== "undefined" && window.speechSynthesis) {
+    // Unlock HTMLAudioElement inside user gesture for mobile/iOS browsers
+    if (typeof window !== "undefined") {
       try {
-        const u = new SpeechSynthesisUtterance(" ");
-        u.volume = 0;
-        window.speechSynthesis.speak(u);
+        const audio = currentAudioRef.current || new Audio();
+        audio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"; // 1 byte silent wav
+        await audio.play();
+        currentAudioRef.current = audio;
       } catch (e) {
-        console.warn("SpeechSynthesis unlock failed:", e);
+        console.warn("Audio unlock failed in send:", e);
       }
     }
 
@@ -1081,47 +1152,8 @@ export default function ActiveInterviewPage({
               </Card>
             )}
 
-            {/* Keyboard Mode Input Form */}
-            {sessionStarted && !isComplete && keyboardMode && (
-              <div className="w-full max-w-xl mx-auto space-y-4 pt-2 animate-fade-in">
-                <textarea
-                  value={typedResponse}
-                  onChange={(e) => setTypedResponse(e.target.value)}
-                  placeholder="Type your response here..."
-                  className="w-full p-4 rounded-xl border border-border bg-white/[0.02] text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary min-h-[100px] resize-none leading-relaxed"
-                  disabled={isSending}
-                />
-                <div className="flex gap-3 justify-center">
-                  <Button
-                    onClick={() => {
-                      cancelSpeech();
-                      setKeyboardMode(false);
-                      setTypedResponse("");
-                    }}
-                    className="flex items-center gap-2 px-6 py-3 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 text-xs font-semibold cursor-pointer text-muted-foreground hover:text-foreground"
-                    disabled={isSending}
-                  >
-                    <Mic className="w-4 h-4" />
-                    Switch to Voice Mode
-                  </Button>
-                  <Button
-                    onClick={() => handleSendAnswer(typedResponse)}
-                    disabled={!typedResponse.trim() || isSending}
-                    className="flex items-center gap-2 px-8 py-3 rounded-full bg-primary text-primary-foreground font-black shadow-lg hover:opacity-90 transition cursor-pointer text-xs"
-                  >
-                    {isSending ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Check className="w-4 h-4" />
-                    )}
-                    Submit Response
-                  </Button>
-                </div>
-              </div>
-            )}
-            
             {/* Submit / Done Speaking Microphone Trigger */}
-            {sessionStarted && !isComplete && !keyboardMode && (
+            {sessionStarted && !isComplete && (
               <div className="w-full flex flex-col items-center justify-center space-y-4 animate-fade-in">
                 <div className="flex justify-center">
                   {audioState === "listening" ? (
@@ -1159,18 +1191,6 @@ export default function ActiveInterviewPage({
                     </Button>
                   )}
                 </div>
-                
-                <button
-                  onClick={() => {
-                    stopListening();
-                    cancelSpeech();
-                    setKeyboardMode(true);
-                  }}
-                  className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground hover:text-foreground transition cursor-pointer"
-                  disabled={isSending}
-                >
-                  Type your response instead
-                </button>
               </div>
             )}
           </div>
@@ -1236,7 +1256,7 @@ function RecruiterAnimoji({
   const vikBars   = mouthFlap ? [4,7,5,9,8,6,7,4]   : [2,2,2,2,2,2,2,2];
 
   return (
-    <div className="relative flex flex-col items-center justify-center h-52 w-52 animate-fade-in select-none">
+    <div className="relative flex flex-col items-center justify-center h-60 w-52 animate-fade-in select-none">
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes robo-bob {
           0%,100% { transform: translateY(0px) rotate(0deg); }
@@ -1272,12 +1292,20 @@ function RecruiterAnimoji({
           0%,100% { opacity: 0.3; transform: scale(0.8); }
           50%      { opacity: 1;   transform: scale(1.3); }
         }
+        @keyframes wave-bar {
+          0%, 100% { transform: scaleY(0.4); }
+          50% { transform: scaleY(1.2); }
+        }
         .robo-head  { transform-origin: 50px 54px; animation: robo-bob 3.8s infinite ease-in-out; }
         .robo-eye   { animation: robo-blink 5.5s infinite; }
         .robo-pupil { animation: led-pulse 2s infinite ease-in-out; }
         .robo-thinking .robo-pupil { animation: robo-scan 2.5s infinite ease-in-out; }
         .antenna-dot { animation: antenna-ping 3.8s infinite ease-in-out; }
         .star-p      { animation: star-twinkle 2s infinite ease-in-out; }
+        .animate-wave-bar {
+          animation: wave-bar 1.0s infinite ease-in-out;
+          transform-origin: center;
+        }
       `}} />
 
       {/* Background effects */}
@@ -1313,13 +1341,16 @@ function RecruiterAnimoji({
             className="w-full h-full object-cover object-center"
           />
           {isSpeaking && (
-            <div className="absolute inset-0 rounded-full border-[6px] border-emerald-400 opacity-80 animate-pulse"></div>
+            <div className="absolute inset-0 rounded-full border-[6px] border-violet-500 opacity-85 animate-pulse z-20"></div>
+          )}
+          {isListening && (
+            <div className="absolute inset-0 rounded-full border-[6px] border-emerald-400 opacity-85 animate-pulse z-20"></div>
           )}
         </div>
       </div>
 
       {/* Status label */}
-      <div className={`mt-2 text-[9px] uppercase font-bold tracking-widest px-3 py-0.5 rounded-full border backdrop-blur-md shadow-lg transition-colors duration-300 ${
+      <div className={`mt-3 text-[9px] uppercase font-black tracking-widest px-3.5 py-1 rounded-full border backdrop-blur-md shadow-lg transition-colors duration-300 ${
         audioState === "speaking"
           ? `${bgTheme} ${borderTheme} ${textTheme} animate-pulse`
           : audioState === "listening"
@@ -1328,11 +1359,39 @@ function RecruiterAnimoji({
           ? "bg-orange-500/10 border-orange-500/20 text-orange-400"
           : "bg-white/5 border-white/10 text-muted-foreground"
       }`}>
-        {audioState === "speaking"  && `${name} speaking`}
-        {audioState === "listening" && "Listening"}
-        {audioState === "thinking"  && "Thinking..."}
+        {audioState === "speaking"  && `${name} (AI Interviewer)`}
+        {audioState === "listening" && "Listening (Speak Now)..."}
+        {audioState === "thinking"  && "Evaluating Response..."}
         {audioState === "idle"      && "Ready"}
       </div>
+
+      {/* Visual audio wave visualizer based on active state */}
+      {audioState === "speaking" && (
+        <div className="flex items-center gap-0.5 justify-center h-4 mt-2 animate-fade-in">
+          <div className="w-1 h-3 bg-violet-400 rounded-full animate-wave-bar" style={{ animationDelay: "0.15s" }} />
+          <div className="w-1 h-4 bg-violet-400 rounded-full animate-wave-bar" style={{ animationDelay: "0.35s" }} />
+          <div className="w-1 h-5 bg-violet-400 rounded-full animate-wave-bar" style={{ animationDelay: "0.55s" }} />
+          <div className="w-1 h-3 bg-violet-400 rounded-full animate-wave-bar" style={{ animationDelay: "0.25s" }} />
+        </div>
+      )}
+      
+      {audioState === "listening" && (
+        <div className="flex items-center gap-0.5 justify-center h-4 mt-2 animate-fade-in">
+          <div className="w-1 h-3 bg-emerald-400 rounded-full animate-wave-bar" style={{ animationDelay: "0.1s" }} />
+          <div className="w-1 h-4 bg-emerald-400 rounded-full animate-wave-bar" style={{ animationDelay: "0.3s" }} />
+          <div className="w-1 h-2 bg-emerald-400 rounded-full animate-wave-bar" style={{ animationDelay: "0.5s" }} />
+          <div className="w-1 h-5 bg-emerald-400 rounded-full animate-wave-bar" style={{ animationDelay: "0.2s" }} />
+          <div className="w-1 h-3 bg-emerald-400 rounded-full animate-wave-bar" style={{ animationDelay: "0.4s" }} />
+        </div>
+      )}
+
+      {audioState === "thinking" && (
+        <div className="flex gap-1 justify-center items-center h-4 mt-2 animate-fade-in">
+          <div className="w-1.5 h-1.5 bg-orange-400 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }} />
+          <div className="w-1.5 h-1.5 bg-orange-400 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
+          <div className="w-1.5 h-1.5 bg-orange-400 rounded-full animate-bounce" style={{ animationDelay: "0.3s" }} />
+        </div>
+      )}
     </div>
   );
 }

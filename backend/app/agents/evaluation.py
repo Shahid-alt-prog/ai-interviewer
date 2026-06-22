@@ -47,11 +47,11 @@ class EvaluationAgent:
             logger.error(f"Failed to evaluate response: {e}")
             # Return basic grading model on failure
             return {
-                "score": 5,
+                "score": 3,
                 "confidence": 0.5,
                 "technical_score": None,
-                "communication_score": 5,
-                "problem_solving_score": 5,
+                "communication_score": 3,
+                "problem_solving_score": 3,
                 "leadership_score": None,
                 "domain_expertise_score": None,
                 "strengths": ["Completed response"],

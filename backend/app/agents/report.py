@@ -47,7 +47,7 @@ class ReportAgent:
                 f"Turn {i+1}:\n"
                 f"Q: {question}\n"
                 f"A: {response}\n"
-                f"Evaluation: Score={eval_data.get('score')}/10, Confidence={eval_data.get('confidence')}\n"
+                f"Evaluation: Score={eval_data.get('score')}/5, Confidence={eval_data.get('confidence')}\n"
                 f"Feedback: Strengths={eval_data.get('strengths')}, Weaknesses={eval_data.get('weaknesses')}\n"
                 f"Reasoning: {eval_data.get('evaluation_reasoning')}\n"
                 f"----------------------------------------"
@@ -85,11 +85,11 @@ class ReportAgent:
             logger.error(f"Failed to generate candidate report: {e}")
             # Fallback report structure
             return {
-                "overall_score": 5.0,
-                "technical_rating": 5,
-                "communication_rating": 5,
-                "problem_solving_rating": 5,
-                "leadership_rating": 5,
+                "overall_score": 3.0,
+                "technical_rating": 3,
+                "communication_rating": 3,
+                "problem_solving_rating": 3,
+                "leadership_rating": 3,
                 "domain_expertise_rating": None,
                 "strengths": ["Completed the interview session"],
                 "weaknesses": ["System failed to fully evaluate responses in final report"],

@@ -55,13 +55,15 @@ export default function ReportsPage() {
   async function loadData() {
     try {
       setLoading(true);
-      const [completed, candidateList] = await Promise.all([
+      const [completedData, candidateData] = await Promise.all([
         interviewsApi.list(0, 50, "completed"),
         candidatesApi.list(0, 100),
       ]);
 
+      const candidateList = candidateData || [];
+      const completed = completedData || [];
+
       setCandidates(candidateList);
-      
       setInterviews(completed);
 
       // Fetch reports for all completed interviews in parallel
@@ -70,7 +72,9 @@ export default function ReportsPage() {
         completed.map(async (interview) => {
           try {
             const report = await interviewsApi.getReport(interview.id);
-            reportMap[interview.id] = report;
+            if (report) {
+              reportMap[interview.id] = report;
+            }
           } catch (err) {
             console.error(`Error loading report for interview ${interview.id}:`, err);
           }
@@ -138,6 +142,10 @@ export default function ReportsPage() {
         recommendation_reasoning: editFormData.recommendation_reasoning,
         summary: editFormData.summary,
       });
+
+      if (!updated) {
+        throw new Error("Failed to update report.");
+      }
 
       // Update local state reports map
       setReports((prev) => ({
