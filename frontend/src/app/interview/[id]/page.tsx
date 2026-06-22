@@ -471,7 +471,28 @@ export default function ActiveInterviewPage({
       }
       
       const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      const audioBuffer = await new Promise<AudioBuffer>((resolve, reject) => {
+        const decodeSuccess = (decodedBuffer: AudioBuffer) => {
+          resolve(decodedBuffer);
+        };
+        const decodeError = (err: any) => {
+          console.error("decodeAudioData error:", err);
+          reject(err || new Error("decodeAudioData failed"));
+        };
+        
+        try {
+          const promise = ctx.decodeAudioData(arrayBuffer, decodeSuccess, decodeError);
+          if (promise && typeof promise.catch === "function") {
+            promise.catch(decodeError);
+          }
+        } catch (e) {
+          try {
+            ctx.decodeAudioData(arrayBuffer, decodeSuccess, decodeError);
+          } catch (syncErr) {
+            reject(syncErr || e);
+          }
+        }
+      });
       
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
@@ -608,7 +629,11 @@ export default function ActiveInterviewPage({
   });
 
   useEffect(() => {
-    if (typeof window === "undefined" || !hasJoinedRoom || !isAiSpeaking) return;
+    const isIOS = typeof window !== "undefined" && 
+      (/iPad|iPhone|iPod/.test(navigator.userAgent) || 
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+      
+    if (typeof window === "undefined" || !hasJoinedRoom || !isAiSpeaking || isIOS) return;
 
     let audioContext: AudioContext;
     let analyser: AnalyserNode;
