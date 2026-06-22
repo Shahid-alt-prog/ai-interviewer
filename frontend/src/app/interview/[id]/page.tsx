@@ -37,7 +37,10 @@ export default function ActiveInterviewPage({
   const [interview, setInterview] = useState<InterviewDetail | null>(null);
   const [candidate, setCandidate] = useState<Candidate | null>(null);
   
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const activeSourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
+  const flapIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isUnlockingRef = useRef(false);
   
   // Session tracking states
   const [sessionStarted, setSessionStarted] = useState(false);
@@ -324,6 +327,10 @@ export default function ActiveInterviewPage({
     recognition.lang = "en-IN"; // Set default recognition to Indian English
 
     recognition.onstart = () => {
+      if (isUnlockingRef.current) {
+        console.log("Ignoring SpeechRecognition start event during unlock sequence");
+        return;
+      }
       setIsListening(true);
       setAudioState("listening");
       interimTranscriptionRef.current = "";
@@ -420,7 +427,7 @@ export default function ActiveInterviewPage({
     };
   }, []);
 
-  // 4. Text-To-Speech (TTS) — using the backend Edge TTS streaming endpoint
+  // 4. Text-To-Speech (TTS) — using Web Audio API for cross-browser autoplay unlocking
   const speakText = async (text: string, onEndCallback?: () => void) => {
     if (typeof window === "undefined") {
       onEndCallback?.();
@@ -448,45 +455,57 @@ export default function ActiveInterviewPage({
     setAudioState("speaking");
 
     try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioContextRef.current;
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
+
       const url = `${API_BASE_URL}/tts/speak?text=${encodeURIComponent(cleanText)}&interviewer=${encodeURIComponent(selectedInterviewer)}`;
       
-      let audio = currentAudioRef.current;
-      if (!audio) {
-        audio = new Audio();
-        currentAudioRef.current = audio;
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`TTS HTTP error: ${response.status}`);
       }
       
-      audio.src = url;
-      audio.load();
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      
+      activeSourceNodeRef.current = source;
+      
+      if (flapIntervalRef.current) {
+        clearInterval(flapIntervalRef.current);
+      }
+      flapIntervalRef.current = setInterval(() => {
+        setMouthFlap(Math.random() > 0.5);
+      }, 150);
 
-      audio.onplay = () => {
-        const flapInterval = setInterval(() => {
-          setMouthFlap(Math.random() > 0.5);
-        }, 150);
-        (audio as any)._flapInterval = flapInterval;
-      };
-
-      audio.onended = () => {
-        if ((audio as any)._flapInterval) clearInterval((audio as any)._flapInterval);
+      source.onended = () => {
+        if (flapIntervalRef.current) {
+          clearInterval(flapIntervalRef.current);
+          flapIntervalRef.current = null;
+        }
         setIsAiSpeaking(false);
-        setAudioState("idle");
         setMouthFlap(false);
-        onEndCallback?.();
+        
+        // Only trigger callback and state updates if this is still the active source
+        if (activeSourceNodeRef.current === source) {
+          activeSourceNodeRef.current = null;
+          setAudioState("idle");
+          onEndCallback?.();
+        }
       };
 
-      audio.onerror = (e) => {
-        if ((audio as any)._flapInterval) clearInterval((audio as any)._flapInterval);
-        console.error("Audio playback error:", e);
-        setIsAiSpeaking(false);
-        setAudioState("idle");
-        setMouthFlap(false);
-        onEndCallback?.();
-      };
-
-      await audio.play();
+      source.start(0);
 
     } catch (error) {
-      console.error("TTS play error:", error);
+      console.error("TTS Web Audio play error:", error);
       setIsAiSpeaking(false);
       setAudioState("idle");
       setMouthFlap(false);
@@ -495,15 +514,18 @@ export default function ActiveInterviewPage({
   };
 
   const cancelSpeech = () => {
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
+    if (activeSourceNodeRef.current) {
       try {
-        currentAudioRef.current.currentTime = 0;
-      } catch (e) {}
-      if ((currentAudioRef.current as any)._flapInterval) {
-         clearInterval((currentAudioRef.current as any)._flapInterval);
+        activeSourceNodeRef.current.stop();
+      } catch (e) {
+        // ignore if already stopped
       }
-      // Keep currentAudioRef.current intact so we can reuse the same unlocked audio element!
+      activeSourceNodeRef.current = null;
+    }
+    
+    if (flapIntervalRef.current) {
+      clearInterval(flapIntervalRef.current);
+      flapIntervalRef.current = null;
     }
     
     // Also cancel standard web speech synth just in case it was used previously
@@ -708,20 +730,24 @@ export default function ActiveInterviewPage({
   const handleJoinCall = async () => {
     if (isJoiningRef.current) return;
 
-    // Unlock HTMLAudioElement and webkitSpeechRecognition inside user gesture for mobile/iOS browsers
+    // Unlock AudioContext and webkitSpeechRecognition inside user gesture for mobile/iOS browsers
     if (typeof window !== "undefined") {
       try {
-        const audio = currentAudioRef.current || new Audio();
-        audio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"; // 1 byte silent wav
-        await audio.play();
-        currentAudioRef.current = audio;
-        console.log("Audio playback context unlocked via user gesture");
+        if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        const ctx = audioContextRef.current;
+        if (ctx.state === "suspended") {
+          await ctx.resume();
+        }
+        console.log("AudioContext unlocked via user gesture");
       } catch (e) {
-        console.warn("Audio unlock failed:", e);
+        console.warn("AudioContext unlock failed:", e);
       }
 
       if (recognitionRef.current) {
         try {
+          isUnlockingRef.current = true;
           recognitionRef.current.start();
           setTimeout(() => {
             try {
@@ -729,10 +755,12 @@ export default function ActiveInterviewPage({
                 recognitionRef.current.stop();
               }
             } catch (e) {}
+            isUnlockingRef.current = false;
           }, 100);
           console.log("SpeechRecognition unlocked via user gesture");
         } catch (e) {
           console.warn("SpeechRecognition unlock failed:", e);
+          isUnlockingRef.current = false;
         }
       }
     }
@@ -795,15 +823,18 @@ export default function ActiveInterviewPage({
   const handleSendAnswer = async (manualText?: string) => {
     if (isSendingRef.current) return;
 
-    // Unlock HTMLAudioElement inside user gesture for mobile/iOS browsers
+    // Unlock AudioContext inside user gesture for mobile/iOS browsers
     if (typeof window !== "undefined") {
       try {
-        const audio = currentAudioRef.current || new Audio();
-        audio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"; // 1 byte silent wav
-        await audio.play();
-        currentAudioRef.current = audio;
+        if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        const ctx = audioContextRef.current;
+        if (ctx.state === "suspended") {
+          await ctx.resume();
+        }
       } catch (e) {
-        console.warn("Audio unlock failed in send:", e);
+        console.warn("AudioContext unlock failed in send:", e);
       }
     }
 
