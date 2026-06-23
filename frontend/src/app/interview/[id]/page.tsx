@@ -37,8 +37,7 @@ export default function ActiveInterviewPage({
   const [interview, setInterview] = useState<InterviewDetail | null>(null);
   const [candidate, setCandidate] = useState<Candidate | null>(null);
   
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const activeSourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const flapIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isUnlockingRef = useRef(false);
   
@@ -248,6 +247,9 @@ export default function ActiveInterviewPage({
       const elapsedMs = now - startedTime;
       const remainingSecs = Math.max(0, Math.floor((durationMs - elapsedMs) / 1000));
       setTimeLeft(remainingSecs);
+      
+      const calculatedProgress = Math.min(99.0, (elapsedMs / durationMs) * 100);
+      setProgress(calculatedProgress);
     };
 
     calculateTimeLeft();
@@ -265,7 +267,17 @@ export default function ActiveInterviewPage({
           clearInterval(timer);
           return 0;
         }
-        return prev - 1;
+        const nextTime = prev - 1;
+        
+        // Sync progress bar smoothly in real time
+        if (interview && interview.duration_minutes) {
+          const durationSecs = interview.duration_minutes * 60;
+          const elapsedSecs = durationSecs - nextTime;
+          const calculatedProgress = Math.min(99.0, (elapsedSecs / durationSecs) * 100);
+          setProgress(calculatedProgress);
+        }
+        
+        return nextTime;
       });
     }, 1000);
 
@@ -427,7 +439,7 @@ export default function ActiveInterviewPage({
     };
   }, []);
 
-  // 4. Text-To-Speech (TTS) — using Web Audio API for cross-browser autoplay unlocking
+  // 4. Text-To-Speech (TTS) — using in-DOM HTML5 Audio element for progressive low-latency streaming
   const speakText = async (text: string, onEndCallback?: () => void) => {
     if (typeof window === "undefined") {
       onEndCallback?.();
@@ -455,78 +467,52 @@ export default function ActiveInterviewPage({
     setAudioState("speaking");
 
     try {
-      if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
-      const ctx = audioContextRef.current;
-      if (ctx.state === "suspended") {
-        await ctx.resume();
-      }
-
       const url = `${API_BASE_URL}/tts/speak?text=${encodeURIComponent(cleanText)}&interviewer=${encodeURIComponent(selectedInterviewer)}`;
       
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`TTS HTTP error: ${response.status}`);
+      const audio = audioElementRef.current;
+      if (!audio) {
+        throw new Error("Audio element not mounted in DOM");
       }
-      
-      const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = await new Promise<AudioBuffer>((resolve, reject) => {
-        const decodeSuccess = (decodedBuffer: AudioBuffer) => {
-          resolve(decodedBuffer);
-        };
-        const decodeError = (err: any) => {
-          console.error("decodeAudioData error:", err);
-          reject(err || new Error("decodeAudioData failed"));
-        };
-        
-        try {
-          const promise = ctx.decodeAudioData(arrayBuffer, decodeSuccess, decodeError);
-          if (promise && typeof promise.catch === "function") {
-            promise.catch(decodeError);
-          }
-        } catch (e) {
-          try {
-            ctx.decodeAudioData(arrayBuffer, decodeSuccess, decodeError);
-          } catch (syncErr) {
-            reject(syncErr || e);
-          }
-        }
-      });
-      
-      const source = ctx.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(ctx.destination);
-      
-      activeSourceNodeRef.current = source;
-      
-      if (flapIntervalRef.current) {
-        clearInterval(flapIntervalRef.current);
-      }
-      flapIntervalRef.current = setInterval(() => {
-        setMouthFlap(Math.random() > 0.5);
-      }, 150);
 
-      source.onended = () => {
+      audio.src = url;
+      audio.load();
+
+      audio.onplay = () => {
+        if (flapIntervalRef.current) {
+          clearInterval(flapIntervalRef.current);
+        }
+        flapIntervalRef.current = setInterval(() => {
+          setMouthFlap(Math.random() > 0.5);
+        }, 150);
+      };
+
+      audio.onended = () => {
         if (flapIntervalRef.current) {
           clearInterval(flapIntervalRef.current);
           flapIntervalRef.current = null;
         }
         setIsAiSpeaking(false);
         setMouthFlap(false);
-        
-        // Only trigger callback and state updates if this is still the active source
-        if (activeSourceNodeRef.current === source) {
-          activeSourceNodeRef.current = null;
-          setAudioState("idle");
-          onEndCallback?.();
-        }
+        setAudioState("idle");
+        onEndCallback?.();
       };
 
-      source.start(0);
+      audio.onerror = (e) => {
+        if (flapIntervalRef.current) {
+          clearInterval(flapIntervalRef.current);
+          flapIntervalRef.current = null;
+        }
+        console.error("Audio playback error:", e);
+        setIsAiSpeaking(false);
+        setMouthFlap(false);
+        setAudioState("idle");
+        onEndCallback?.();
+      };
+
+      await audio.play();
 
     } catch (error) {
-      console.error("TTS Web Audio play error:", error);
+      console.error("TTS play error:", error);
       setIsAiSpeaking(false);
       setAudioState("idle");
       setMouthFlap(false);
@@ -535,13 +521,11 @@ export default function ActiveInterviewPage({
   };
 
   const cancelSpeech = () => {
-    if (activeSourceNodeRef.current) {
+    if (audioElementRef.current) {
+      audioElementRef.current.pause();
       try {
-        activeSourceNodeRef.current.stop();
-      } catch (e) {
-        // ignore if already stopped
-      }
-      activeSourceNodeRef.current = null;
+        audioElementRef.current.currentTime = 0;
+      } catch (e) {}
     }
     
     if (flapIntervalRef.current) {
@@ -633,7 +617,7 @@ export default function ActiveInterviewPage({
       (/iPad|iPhone|iPod/.test(navigator.userAgent) || 
       (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
       
-    if (typeof window === "undefined" || !hasJoinedRoom || !isAiSpeaking || isIOS) return;
+    if (typeof window === "undefined" || !hasJoinedRoom || isComplete || isIOS) return;
 
     let audioContext: AudioContext;
     let analyser: AnalyserNode;
@@ -671,7 +655,7 @@ export default function ActiveInterviewPage({
           }
           const average = sum / dataArray.length;
           
-          // Interrupt AI if average amplitude exceeds threshold of 15 (tuned for voice activity)
+          // Interrupt AI if average amplitude exceeds threshold of 15 (tuned for voice activity) and AI is speaking
           if (isAiSpeakingRef.current && average > 15) { 
             console.log("Candidate speaking detected (volume average:", average, "). Interrupting AI.");
             handleInterruptRef.current();
@@ -699,7 +683,7 @@ export default function ActiveInterviewPage({
         audioContext.close();
       }
     };
-  }, [hasJoinedRoom, isAiSpeaking]);
+  }, [hasJoinedRoom, isComplete]);
 
   // Setup WebSocket when room is joined
   useEffect(() => {
@@ -755,19 +739,16 @@ export default function ActiveInterviewPage({
   const handleJoinCall = async () => {
     if (isJoiningRef.current) return;
 
-    // Unlock AudioContext and webkitSpeechRecognition inside user gesture for mobile/iOS browsers
+    // Unlock HTML5 Audio and webkitSpeechRecognition inside user gesture for mobile/iOS browsers
     if (typeof window !== "undefined") {
       try {
-        if (!audioContextRef.current) {
-          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        if (audioElementRef.current) {
+          audioElementRef.current.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"; // 1 byte silent wav
+          await audioElementRef.current.play();
+          console.log("DOM Audio element unlocked synchronously via user gesture");
         }
-        const ctx = audioContextRef.current;
-        if (ctx.state === "suspended") {
-          await ctx.resume();
-        }
-        console.log("AudioContext unlocked via user gesture");
       } catch (e) {
-        console.warn("AudioContext unlock failed:", e);
+        console.warn("DOM Audio unlock failed:", e);
       }
 
       if (recognitionRef.current) {
@@ -848,18 +829,13 @@ export default function ActiveInterviewPage({
   const handleSendAnswer = async (manualText?: string) => {
     if (isSendingRef.current) return;
 
-    // Unlock AudioContext inside user gesture for mobile/iOS browsers
-    if (typeof window !== "undefined") {
+    // Unlock HTML5 Audio inside user gesture for mobile/iOS browsers
+    if (typeof window !== "undefined" && audioElementRef.current) {
       try {
-        if (!audioContextRef.current) {
-          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        }
-        const ctx = audioContextRef.current;
-        if (ctx.state === "suspended") {
-          await ctx.resume();
-        }
+        audioElementRef.current.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"; // 1 byte silent wav
+        await audioElementRef.current.play();
       } catch (e) {
-        console.warn("AudioContext unlock failed in send:", e);
+        console.warn("DOM Audio unlock failed in send:", e);
       }
     }
 
@@ -944,6 +920,7 @@ export default function ActiveInterviewPage({
 
   return (
     <div className="min-h-screen bg-[#07070a] text-foreground flex flex-col justify-between overflow-x-hidden overflow-y-auto">
+      <audio ref={audioElementRef} playsInline preload="auto" style={{ opacity: 0, position: "absolute", width: "1px", height: "1px" }} controls={false} />
       {/* Top Banner Header */}
       <header className="glass h-16 border-b border-white/[0.05] flex items-center justify-between px-6 md:px-12 fixed top-0 left-0 right-0 z-40">
         <div className="flex items-center gap-2">
@@ -1395,8 +1372,14 @@ function RecruiterAnimoji({
         )}
       </div>
 
-      {/* Robot SVG */}
-      <div className={`w-44 h-44 drop-shadow-[0_8px_32px_rgba(0,0,0,0.85)] z-10 transition-transform duration-500 ${speakingClass} ${thinkingClass}`}>
+      {/* Robot SVG (Clickable for mobile fallback) */}
+      <button 
+        onClick={() => {
+          if (isListening) stopListening();
+          else if (!isSpeaking && !isThinking) startListening();
+        }}
+        className={`w-44 h-44 drop-shadow-[0_8px_32px_rgba(0,0,0,0.85)] z-10 transition-transform duration-500 cursor-pointer hover:scale-105 active:scale-95 ${speakingClass} ${thinkingClass}`}
+      >
         <div className="relative w-full h-full rounded-full overflow-hidden border-4 border-white/10 shadow-[0_0_40px_rgba(0,0,0,0.5)]">
           <Image 
             src={`/animojis/${name.toLowerCase()}.jpg`} 
@@ -1412,7 +1395,7 @@ function RecruiterAnimoji({
             <div className="absolute inset-0 rounded-full border-[6px] border-emerald-400 opacity-85 animate-pulse z-20"></div>
           )}
         </div>
-      </div>
+      </button>
 
       {/* Status label */}
       <div className={`mt-3 text-[9px] uppercase font-black tracking-widest px-3.5 py-1 rounded-full border backdrop-blur-md shadow-lg transition-colors duration-300 ${
@@ -1428,6 +1411,11 @@ function RecruiterAnimoji({
         {audioState === "listening" && "Listening (Speak Now)..."}
         {audioState === "thinking"  && "Evaluating Response..."}
         {audioState === "idle"      && "Ready"}
+      </div>
+
+      {/* Mobile hint */}
+      <div className="md:hidden mt-2 text-[10px] text-white/40 font-medium">
+        {audioState === "idle" ? "Tap avatar to speak" : " "}
       </div>
 
       {/* Visual audio wave visualizer based on active state */}

@@ -233,7 +233,7 @@ async def interview_websocket(
                                 update_dict={
                                     "status": InterviewStatus.EVALUATING,
                                     "completed_at": datetime.now(IST).replace(tzinfo=None),
-                                    "conversation_history": history,
+                                    "conversation_history": list(history),
                                 }
                             )
                             existing_report = await service.eval_repo.get_report_by_interview_id(interview_id)

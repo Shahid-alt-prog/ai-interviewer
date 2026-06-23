@@ -384,7 +384,7 @@ class InterviewService:
                 update_dict={
                     "status": InterviewStatus.EVALUATING,
                     "completed_at": datetime.now(IST).replace(tzinfo=None),
-                    "conversation_history": history,
+                    "conversation_history": list(history),
                 }
             )
 
@@ -425,7 +425,7 @@ class InterviewService:
             interview=interview,
             update_dict={
                 "current_section": sections[current_sec_index].get("name") if current_sec_index < len(sections) else "Interview",
-                "conversation_history": history,
+                "conversation_history": list(history),
             }
         )
 
